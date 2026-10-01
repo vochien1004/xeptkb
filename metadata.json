@@ -1,0 +1,6 @@
+{
+  "name": "TKB Engine Pro - Hệ thống Xếp Thời Khóa Biểu Thông Minh",
+  "description": "Bộ khung thuật toán CSP + Genetic Algorithm cho bài toán Xếp Thời Khóa Biểu phức tạp: Tiết ghép, Co-teaching, Kiểm tra xung đột & Firebase Firestore Schema.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

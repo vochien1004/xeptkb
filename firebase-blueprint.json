@@ -1,0 +1,244 @@
+{
+  "entities": {
+    "School": {
+      "title": "School",
+      "description": "Thông tin tổ chức trường học đăng ký sử dụng hệ thống TKB",
+      "type": "object",
+      "properties": {
+        "schoolId": {
+          "type": "string",
+          "description": "Mã định danh duy nhất của trường học"
+        },
+        "schoolName": {
+          "type": "string",
+          "description": "Tên đầy đủ của trường học"
+        },
+        "adminUsername": {
+          "type": "string",
+          "description": "Tên đăng nhập của quản trị viên trường học"
+        },
+        "adminEmail": {
+          "type": "string",
+          "description": "Email quản trị viên trường học"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Số điện thoại liên hệ"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive"],
+          "description": "Trạng thái cấp phép hoạt động"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Thời điểm tạo trường học"
+        },
+        "expiredAt": {
+          "type": "string",
+          "description": "Thời điểm hết hạn bản quyền"
+        }
+      },
+      "required": ["schoolId", "schoolName", "adminEmail", "status", "createdAt", "expiredAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Thông tin tài khoản người dùng và phân quyền RBAC",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Mã định danh tài khoản người dùng"
+        },
+        "username": {
+          "type": "string",
+          "description": "Tên đăng nhập duy nhất"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Số điện thoại"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email đăng nhập"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["super_admin", "school_admin", "teacher"],
+          "description": "Vai trò phân quyền của người dùng"
+        },
+        "schoolId": {
+          "type": "string",
+          "description": "Mã trường học người dùng trực thuộc"
+        }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Thông tin giáo viên giảng dạy của trường",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Mã định danh giáo viên"
+        },
+        "name": {
+          "type": "string",
+          "description": "Họ và tên giáo viên"
+        },
+        "shortName": {
+          "type": "string",
+          "description": "Tên viết tắt hiển thị trên lưới TKB"
+        },
+        "schoolId": {
+          "type": "string",
+          "description": "Mã trường học trực thuộc"
+        }
+      },
+      "required": ["id", "name", "shortName"]
+    },
+    "SchoolClass": {
+      "title": "SchoolClass",
+      "description": "Thông tin lớp học của trường",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Mã định danh lớp học"
+        },
+        "name": {
+          "type": "string",
+          "description": "Tên lớp học"
+        },
+        "grade": {
+          "type": "number",
+          "description": "Khối lớp (10, 11, 12)"
+        },
+        "schoolId": {
+          "type": "string",
+          "description": "Mã trường học trực thuộc"
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Thông tin môn học",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Mã định danh môn học"
+        },
+        "name": {
+          "type": "string",
+          "description": "Tên môn học"
+        },
+        "shortName": {
+          "type": "string",
+          "description": "Tên viết tắt môn học"
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Phòng học, phòng thực hành, sân bãi",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Mã định danh phòng"
+        },
+        "name": {
+          "type": "string",
+          "description": "Tên phòng học"
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "TeachingAssignment": {
+      "title": "TeachingAssignment",
+      "description": "Phân công chuyên môn giảng dạy giữa giáo viên và lớp học",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Mã định danh phân công"
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Mã môn học"
+        },
+        "periodsPerWeek": {
+          "type": "number",
+          "description": "Số tiết giảng dạy mỗi tuần"
+        }
+      },
+      "required": ["id", "subjectId", "periodsPerWeek"]
+    },
+    "TimetableSlot": {
+      "title": "TimetableSlot",
+      "description": "Ô tiết thời khóa biểu phân phối trên lưới",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Mã định danh slot tiết"
+        },
+        "day": {
+          "type": "number",
+          "description": "Thứ trong tuần (2 đến 7)"
+        },
+        "period": {
+          "type": "number",
+          "description": "Tiết học trong buổi (1 đến 5)"
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Mã môn học"
+        }
+      },
+      "required": ["id", "day", "period", "subjectId"]
+    }
+  },
+  "firestore": {
+    "/schools/{schoolId}": {
+      "schema": "School",
+      "description": "Document trường học trong mô hình Multi-tenancy"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Thông tin tài khoản đăng nhập và phân quyền"
+    },
+    "/schools/{schoolId}/teachers/{teacherId}": {
+      "schema": "Teacher",
+      "description": "Danh sách giáo viên thuộc trường học"
+    },
+    "/schools/{schoolId}/classes/{classId}": {
+      "schema": "SchoolClass",
+      "description": "Danh sách lớp học thuộc trường học"
+    },
+    "/schools/{schoolId}/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Danh sách môn học thuộc trường học"
+    },
+    "/schools/{schoolId}/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Danh sách phòng học và thiết bị của trường"
+    },
+    "/schools/{schoolId}/teachingAssignments/{assignmentId}": {
+      "schema": "TeachingAssignment",
+      "description": "Bảng phân công chuyên môn giảng dạy của trường"
+    },
+    "/schools/{schoolId}/timetables/{timetableId}": {
+      "schema": "TimetableSlot",
+      "description": "Lưới tiết thời khóa biểu chính thức của trường"
+    },
+    "/schools/{schoolId}/settings/{settingId}": {
+      "schema": "object",
+      "description": "Cấu hình tùy chỉnh xuất file và hệ thống của trường"
+    }
+  }
+}
