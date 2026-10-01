@@ -194,6 +194,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, school]);
 
+  // Bổ sung EventListener lắng nghe sự kiện đồng bộ dữ liệu trường (ví dụ sau khi Super Admin duyệt gia hạn)
+  useEffect(() => {
+    const handleSchoolUpdated = () => {
+      verifyCurrentAccess();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('school_data_updated', handleSchoolUpdated);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('school_data_updated', handleSchoolUpdated);
+      }
+    };
+  }, [verifyCurrentAccess]);
+
   // Đăng nhập kết nối Firebase Auth / Username & Password / Phone
   const login = async (credentials: {
     identifier?: string;

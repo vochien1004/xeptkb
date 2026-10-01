@@ -16,7 +16,12 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // 3. Fallback catch-all for system documents
+    // 3. Renewal Requests collection (/renewal_requests/{requestId})
+    match /renewal_requests/{requestId} {
+      allow read, write: if true;
+    }
+
+    // 4. Fallback catch-all for system documents
     match /{document=**} {
       allow read, write: if true;
     }

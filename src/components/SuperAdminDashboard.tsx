@@ -587,6 +587,7 @@ export const SuperAdminDashboard: React.FC<Props> = ({
         if (res.success) {
           showToast(`✓ Đã gửi tin nhắn phản hồi đến trường "${reviewingRequest.schoolName}" thành công!`);
           setReviewingRequest(null);
+          await loadRenewalRequests();
         } else {
           showToast('Lỗi gửi phản hồi: ' + res.error, 'error');
         }
@@ -605,6 +606,7 @@ export const SuperAdminDashboard: React.FC<Props> = ({
             showToast(`✓ Đã từ chối yêu cầu gia hạn của trường "${reviewingRequest.schoolName}".`);
           }
           setReviewingRequest(null);
+          await loadRenewalRequests();
           await loadSchools();
         } else {
           showToast('Lỗi xử lý: ' + res.error, 'error');
