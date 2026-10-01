@@ -1,6 +1,6 @@
 /**
  * renewalService.ts - Service quản lý yêu cầu gia hạn bản quyền trường học (/renewal_requests)
- * Đồng bộ hai chiều đám mây Firebase Firestore NoSQL & Realtime Snapshot & Polling & Local Storage Cache
+ * Cơ chế Offline-First + Auto-Sync Đám mây Firestore NoSQL & Realtime Snapshot & Polling
  */
 
 import {
@@ -19,6 +19,7 @@ import { RenewalRequest, RenewalStatus } from '../types/school';
 import { extendSchoolExpiryByDays } from './superAdminService';
 
 export const RENEWAL_REQUESTS_COLLECTION = 'renewal_requests';
+const PENDING_SYNC_KEY = 'pending_sync_renewal_requests';
 
 function getLocalRenewalCache(schoolId?: string): RenewalRequest[] {
   if (typeof window === 'undefined') return [];
@@ -65,8 +66,73 @@ function saveLocalRenewalCache(req: RenewalRequest, schoolId?: string) {
 }
 
 /**
+ * Thêm một yêu cầu vào hàng đợi đồng bộ ngầm khi chưa đẩy lên được Firestore
+ */
+function queueForBackgroundSync(req: RenewalRequest) {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(PENDING_SYNC_KEY);
+    const queue: RenewalRequest[] = raw ? JSON.parse(raw) : [];
+    if (!queue.some((item) => item.id === req.id)) {
+      queue.push(req);
+      localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(queue));
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+/**
+ * ĐỒNG BỘ CÁC YÊU CẦU ĐANG CHỜ LÊN FIRESTORE ĐÁM MÂY
+ */
+export async function syncPendingRenewalRequests(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const rawQueue = localStorage.getItem(PENDING_SYNC_KEY);
+    if (!rawQueue) return;
+    const queue: RenewalRequest[] = JSON.parse(rawQueue);
+    if (!queue || queue.length === 0) return;
+
+    await ensureFirebaseAuthSession();
+    const remainingQueue: RenewalRequest[] = [];
+
+    for (const item of queue) {
+      try {
+        const docRef = doc(collection(db, RENEWAL_REQUESTS_COLLECTION), item.id);
+        await setDoc(docRef, {
+          schoolId: String(item.schoolId || '').trim(),
+          schoolName: String(item.schoolName || 'Trường chưa đặt tên').trim(),
+          adminEmail: String(item.adminEmail || '').trim().toLowerCase(),
+          adminUsername: String(item.adminUsername || '').trim(),
+          months: Number(item.months) || 12,
+          packageName: String(item.packageName || 'Gói gia hạn').trim(),
+          phone: String(item.phone || '').trim(),
+          notes: String(item.notes || '').trim(),
+          status: item.status || 'pending',
+          responseMessage: String(item.responseMessage || '').trim(),
+          adminNotes: String(item.adminNotes || '').trim(),
+          createdAt: item.createdAt || new Date().toISOString(),
+          serverCreatedAt: serverTimestamp(),
+        });
+        console.log(`✅ [syncPendingRenewalRequests] Đã đồng bộ yêu cầu gia hạn ${item.id} lên Firestore!`);
+      } catch (e) {
+        remainingQueue.push(item);
+      }
+    }
+
+    if (remainingQueue.length > 0) {
+      localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(remainingQueue));
+    } else {
+      localStorage.removeItem(PENDING_SYNC_KEY);
+    }
+  } catch (err) {
+    // ignore
+  }
+}
+
+/**
  * 1. GỬI YÊU CẦU GIA HẠN MỚI TỪ ADMIN TRƯỜNG
- * Đảm bảo ghi trực tiếp vào Firestore trên đám mây để Super Admin ở thiết bị khác nhận được
+ * Chuẩn hóa 100% dữ liệu (loại bỏ hoàn toàn undefined) + Lưu Local + Đẩy Firestore + Hàng đợi tự động đồng bộ
  */
 export async function submitRenewalRequest(payload: {
   schoolId: string;
@@ -78,93 +144,96 @@ export async function submitRenewalRequest(payload: {
   notes?: string;
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
-    if (!payload.schoolId || !payload.schoolId.trim()) {
-      return { success: false, error: 'Thiếu thông tin School ID của trường học' };
+    const schoolId = String(payload.schoolId || '').trim();
+    const schoolName = String(payload.schoolName || 'Trường chưa đặt tên').trim();
+    const adminEmail = String(payload.adminEmail || '').trim().toLowerCase();
+    const adminUsername = String(payload.adminUsername || '').trim();
+    const phone = String(payload.phone || '').trim();
+    const notes = String(payload.notes || '').trim();
+    const months = Number(payload.months) || 12;
+
+    if (!schoolId) {
+      return { success: false, error: 'Thiếu thông tin Mã Trường (School ID)' };
     }
-    if (!payload.phone || !payload.phone.trim()) {
+    if (!phone) {
       return { success: false, error: 'Vui lòng nhập số điện thoại liên hệ xác nhận' };
     }
 
-    // 1. Đảm bảo phiên phiên làm việc Auth sẵn sàng trước khi truy vấn Firestore
-    await ensureFirebaseAuthSession();
-
     const packageName =
-      payload.months === 3
+      months === 3
         ? 'Gói 3 tháng'
-        : payload.months === 6
+        : months === 6
         ? 'Gói 6 tháng'
-        : payload.months === 12
+        : months === 12
         ? 'Gói 12 tháng (1 năm)'
-        : `Gói ${payload.months} tháng`;
+        : `Gói ${months} tháng`;
 
-    const now = new Date();
-    const createdAt = now.toISOString();
+    const nowIso = new Date().toISOString();
 
-    const newRequestData: Omit<RenewalRequest, 'id'> = {
-      schoolId: payload.schoolId.trim(),
-      schoolName: payload.schoolName.trim(),
-      adminEmail: payload.adminEmail.trim().toLowerCase(),
-      adminUsername: payload.adminUsername?.trim() || '',
-      months: payload.months,
-      packageName,
-      phone: payload.phone.trim(),
-      notes: payload.notes?.trim() || '',
-      status: 'pending',
-      createdAt,
-    };
-
-    // Tạo Reference trực tiếp với ID tự động từ Firestore
+    // Tạo ID tài liệu mới duy nhất
     const colRef = collection(db, RENEWAL_REQUESTS_COLLECTION);
     const newDocRef = doc(colRef);
     const docId = newDocRef.id;
 
     const fullRecord: RenewalRequest = {
       id: docId,
-      ...newRequestData,
+      schoolId,
+      schoolName,
+      adminEmail,
+      adminUsername,
+      months,
+      packageName,
+      phone,
+      notes,
+      status: 'pending',
+      responseMessage: '',
+      adminNotes: '',
+      createdAt: nowIso,
     };
 
-    let isFirestoreSaved = false;
+    // 1. Lưu ngay lập tức vào LocalStorage Cache để hiển thị tức thì trên UI
+    saveLocalRenewalCache(fullRecord, schoolId);
 
-    // Thử ghi trực tiếp vào Firestore
+    // 2. Thử đẩy trực tiếp lên Cloud Firestore
+    let isSavedToCloud = false;
     try {
+      await ensureFirebaseAuthSession();
       await setDoc(newDocRef, {
-        ...newRequestData,
+        schoolId,
+        schoolName,
+        adminEmail,
+        adminUsername,
+        months,
+        packageName,
+        phone,
+        notes,
+        status: 'pending',
+        responseMessage: '',
+        adminNotes: '',
+        createdAt: nowIso,
         serverCreatedAt: serverTimestamp(),
       });
-      isFirestoreSaved = true;
+      isSavedToCloud = true;
+      console.log('✅ [submitRenewalRequest] Đã lưu yêu cầu trực tiếp lên Firestore:', docId);
     } catch (fsErr) {
-      console.warn('⚠️ [submitRenewalRequest] Lỗi lần 1 ghi Firestore, thử khởi tạo phiên Auth và lưu lại...', fsErr);
-      try {
-        await ensureFirebaseAuthSession();
-        await setDoc(newDocRef, {
-          ...newRequestData,
-          serverCreatedAt: serverTimestamp(),
-        });
-        isFirestoreSaved = true;
-      } catch (retryErr) {
-        console.error('❌ [submitRenewalRequest] Không thể lưu yêu cầu lên Firestore đám mây:', retryErr);
-      }
+      console.warn('⚠️ [submitRenewalRequest] Không thể ghi Firestore ngay lúc này, đưa vào hàng đợi tự động đồng bộ:', fsErr);
+      queueForBackgroundSync(fullRecord);
     }
 
-    // Luôn lưu cache local dự phòng
-    saveLocalRenewalCache(fullRecord, payload.schoolId);
-
-    // Phát sự kiện nội bộ để cập nhật UI ngay lập tức trên các Tab/Component
+    // 3. Phát sự kiện cập nhật giao diện các Tab / Màn hình
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('renewal_request_updated', { detail: fullRecord }));
     }
 
-    if (!isFirestoreSaved) {
-      return {
-        success: false,
-        error: 'Không thể kết nối đến máy chủ dữ liệu đám mây. Vui lòng kiểm tra mạng và thử lại!',
-      };
-    }
+    // 4. Kích hoạt đồng bộ ngầm
+    setTimeout(() => {
+      syncPendingRenewalRequests();
+    }, 1000);
 
     return { success: true, id: docId };
   } catch (err: any) {
-    console.error('❌ [submitRenewalRequest] Lỗi:', err);
-    return { success: false, error: err.message || 'Có lỗi xảy ra khi gửi yêu cầu' };
+    console.error('❌ [submitRenewalRequest] Lỗi không xác định:', err);
+    return { success: false, error: err.message || 'Có lỗi xảy ra khi tạo yêu cầu gia hạn' };
   }
 }
 
@@ -187,17 +256,17 @@ export async function fetchSchoolRenewalRequests(schoolId: string): Promise<Rene
         const data = d.data();
         remoteList.push({
           id: d.id,
-          schoolId: data.schoolId || schoolId,
-          schoolName: data.schoolName || '',
-          adminEmail: data.adminEmail || '',
-          adminUsername: data.adminUsername || '',
-          months: data.months || 12,
-          packageName: data.packageName || `${data.months || 12} tháng`,
-          phone: data.phone || '',
-          notes: data.notes || '',
+          schoolId: String(data.schoolId || schoolId).trim(),
+          schoolName: String(data.schoolName || '').trim(),
+          adminEmail: String(data.adminEmail || '').trim(),
+          adminUsername: String(data.adminUsername || '').trim(),
+          months: Number(data.months) || 12,
+          packageName: String(data.packageName || `${data.months || 12} tháng`).trim(),
+          phone: String(data.phone || '').trim(),
+          notes: String(data.notes || '').trim(),
           status: data.status || 'pending',
-          responseMessage: data.responseMessage || '',
-          adminNotes: data.adminNotes || '',
+          responseMessage: String(data.responseMessage || '').trim(),
+          adminNotes: String(data.adminNotes || '').trim(),
           createdAt: data.createdAt || new Date().toISOString(),
           reviewedAt: data.reviewedAt,
           reviewedBy: data.reviewedBy,
@@ -212,8 +281,11 @@ export async function fetchSchoolRenewalRequests(schoolId: string): Promise<Rene
       return remoteList;
     }
   } catch (err) {
-    console.warn('⚠️ [fetchSchoolRenewalRequests] Lỗi đọc Firestore, sử dụng cache:', err);
+    console.warn('⚠️ [fetchSchoolRenewalRequests] Lỗi đọc Firestore, dùng local cache:', err);
   }
+
+  // Luôn thử đồng bộ các request chưa được ghi lên cloud
+  syncPendingRenewalRequests();
 
   return localList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
@@ -235,17 +307,17 @@ export async function fetchAllRenewalRequests(): Promise<RenewalRequest[]> {
         const data = d.data();
         remoteList.push({
           id: d.id,
-          schoolId: data.schoolId || '',
-          schoolName: data.schoolName || '',
-          adminEmail: data.adminEmail || '',
-          adminUsername: data.adminUsername || '',
-          months: data.months || 12,
-          packageName: data.packageName || `${data.months || 12} tháng`,
-          phone: data.phone || '',
-          notes: data.notes || '',
+          schoolId: String(data.schoolId || '').trim(),
+          schoolName: String(data.schoolName || '').trim(),
+          adminEmail: String(data.adminEmail || '').trim(),
+          adminUsername: String(data.adminUsername || '').trim(),
+          months: Number(data.months) || 12,
+          packageName: String(data.packageName || `${data.months || 12} tháng`).trim(),
+          phone: String(data.phone || '').trim(),
+          notes: String(data.notes || '').trim(),
           status: data.status || 'pending',
-          responseMessage: data.responseMessage || '',
-          adminNotes: data.adminNotes || '',
+          responseMessage: String(data.responseMessage || '').trim(),
+          adminNotes: String(data.adminNotes || '').trim(),
           createdAt: data.createdAt || new Date().toISOString(),
           reviewedAt: data.reviewedAt,
           reviewedBy: data.reviewedBy,
@@ -260,15 +332,16 @@ export async function fetchAllRenewalRequests(): Promise<RenewalRequest[]> {
       return remoteList;
     }
   } catch (err) {
-    console.warn('⚠️ [fetchAllRenewalRequests] Lỗi đọc Firestore, sử dụng cache:', err);
+    console.warn('⚠️ [fetchAllRenewalRequests] Lỗi đọc Firestore, dùng local cache:', err);
   }
+
+  syncPendingRenewalRequests();
 
   return localList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 /**
  * 4. REALTIME SUBSCRIPTION + POLLING FALLBACK CHO YÊU CẦU GIA HẠN
- * Đảm bảo trên Cloudflare Super Admin nhận được dữ liệu realtime tức thì
  */
 export function subscribeToRenewalRequestsRealtime(
   callback: (requests: RenewalRequest[]) => void,
@@ -296,17 +369,17 @@ export function subscribeToRenewalRequestsRealtime(
             const data = d.data();
             list.push({
               id: d.id,
-              schoolId: data.schoolId || '',
-              schoolName: data.schoolName || '',
-              adminEmail: data.adminEmail || '',
-              adminUsername: data.adminUsername || '',
-              months: data.months || 12,
-              packageName: data.packageName || `${data.months || 12} tháng`,
-              phone: data.phone || '',
-              notes: data.notes || '',
+              schoolId: String(data.schoolId || '').trim(),
+              schoolName: String(data.schoolName || '').trim(),
+              adminEmail: String(data.adminEmail || '').trim(),
+              adminUsername: String(data.adminUsername || '').trim(),
+              months: Number(data.months) || 12,
+              packageName: String(data.packageName || `${data.months || 12} tháng`).trim(),
+              phone: String(data.phone || '').trim(),
+              notes: String(data.notes || '').trim(),
               status: data.status || 'pending',
-              responseMessage: data.responseMessage || '',
-              adminNotes: data.adminNotes || '',
+              responseMessage: String(data.responseMessage || '').trim(),
+              adminNotes: String(data.adminNotes || '').trim(),
               createdAt: data.createdAt || new Date().toISOString(),
               reviewedAt: data.reviewedAt,
               reviewedBy: data.reviewedBy,
@@ -325,22 +398,23 @@ export function subscribeToRenewalRequestsRealtime(
           callback(list);
         },
         (err) => {
-          console.warn('⚠️ [subscribeToRenewalRequestsRealtime] Lỗi snapshot, chuyển sang polling HTTP:', err);
+          console.warn('⚠️ [subscribeToRenewalRequestsRealtime] Lỗi snapshot, chuyển sang polling:', err);
           callback(getLocalRenewalCache(schoolId));
         }
       );
     } catch (err) {
-      console.warn('⚠️ [subscribeToRenewalRequestsRealtime] Lỗi khởi tạo snapshot:', err);
+      console.warn('⚠️ [subscribeToRenewalRequestsRealtime] Exception snapshot:', err);
       callback(getLocalRenewalCache(schoolId));
     }
   };
 
   runSubscribe();
 
-  // Bổ sung cơ chế Polling HTTP định kỳ 4 giây làm dự phòng cho Cloudflare Edge / Firewall
+  // Polling HTTP định kỳ 3 giây làm giải pháp bổ trợ đồng bộ
   const pollingInterval = setInterval(async () => {
     if (isUnsubscribed) return;
     try {
+      await syncPendingRenewalRequests();
       const latest = schoolId
         ? await fetchSchoolRenewalRequests(schoolId)
         : await fetchAllRenewalRequests();
@@ -350,9 +424,8 @@ export function subscribeToRenewalRequestsRealtime(
     } catch (e) {
       // ignore
     }
-  }, 4000);
+  }, 3000);
 
-  // Bổ sung EventListener nhận thông báo nội bộ thiết bị
   const handleLocalEvent = async () => {
     if (isUnsubscribed) return;
     const items = schoolId
@@ -377,7 +450,6 @@ export function subscribeToRenewalRequestsRealtime(
 
 /**
  * 5. DUYỆT HOẶC TỪ CHỐI YÊU CẦU GIA HẠN DÀNH CHO SUPER ADMIN
- * Cập nhật Firestore + gia hạn ngày dùng trường + cập nhật local cache + phát sự kiện đồng bộ
  */
 export async function reviewRenewalRequest(
   request: RenewalRequest,
@@ -403,14 +475,14 @@ export async function reviewRenewalRequest(
 
     if (request.id) {
       try {
-        const docRef = doc(db, RENEWAL_REQUESTS_COLLECTION, request.id);
-        const updates: any = {
+        const docRef = doc(collection(db, RENEWAL_REQUESTS_COLLECTION), request.id);
+        const updates: Record<string, any> = {
           status: newStatus,
           reviewedAt: nowIso,
-          reviewedBy: adminEmail,
+          reviewedBy: String(adminEmail || '').trim(),
           updatedAt: serverTimestamp(),
         };
-        if (responseMessage !== undefined) {
+        if (responseMessage && responseMessage.trim()) {
           updates.responseMessage = responseMessage.trim();
         }
         if (customMonths) {
@@ -423,7 +495,7 @@ export async function reviewRenewalRequest(
       }
     }
 
-    // Nếu duyệt (approve) -> Tự động gia hạn thời gian cho Trường học trong Firestore
+    // Nếu duyệt -> Cộng dồn số ngày vào thời hạn sử dụng trường
     if (action === 'approve') {
       const days = monthsToApply * 30;
       await extendSchoolExpiryByDays(request.schoolId, days, packageName);
@@ -441,7 +513,6 @@ export async function reviewRenewalRequest(
 
     saveLocalRenewalCache(updatedReq, request.schoolId);
 
-    // Phát sự kiện toàn cục để UI các trường nhận thông tin xét duyệt tức thì
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('renewal_request_updated', { detail: updatedReq }));
       window.dispatchEvent(new CustomEvent('school_data_updated'));
@@ -467,13 +538,12 @@ export async function sendRenewalResponse(
       return { success: false, error: 'Thiếu Request ID' };
     }
     await ensureFirebaseAuthSession();
-    const nowIso = new Date().toISOString();
 
     try {
-      const docRef = doc(db, RENEWAL_REQUESTS_COLLECTION, request.id);
+      const docRef = doc(collection(db, RENEWAL_REQUESTS_COLLECTION), request.id);
       await updateDoc(docRef, {
-        responseMessage: responseMessage.trim(),
-        reviewedBy: adminEmail,
+        responseMessage: String(responseMessage || '').trim(),
+        reviewedBy: String(adminEmail || '').trim(),
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
@@ -482,7 +552,7 @@ export async function sendRenewalResponse(
 
     const updatedReq: RenewalRequest = {
       ...request,
-      responseMessage: responseMessage.trim(),
+      responseMessage: String(responseMessage || '').trim(),
       reviewedBy: adminEmail,
     };
 
