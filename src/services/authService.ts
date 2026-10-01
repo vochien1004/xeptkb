@@ -9,7 +9,9 @@ import {
   signInWithEmailAndPassword,
   signInAnonymously,
   signOut,
+  sendEmailVerification,
   sendPasswordResetEmail,
+  updatePassword,
   onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
@@ -613,6 +615,14 @@ export async function registerTrialSchool(
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       userUid = userCredential.user.uid;
       console.log('✅ [registerTrialSchool] Bước 1: Đã tạo tài khoản Auth thành công. UID:', userUid);
+
+      // XÁC THỰC EMAIL (Email Verification): Tự động gửi email kích hoạt sau khi đăng ký
+      try {
+        await sendEmailVerification(userCredential.user);
+        console.log('✉️ [registerTrialSchool] Đã tự động gửi email xác thực kích hoạt đến:', email);
+      } catch (verErr) {
+        console.warn('⚠️ [registerTrialSchool] Lỗi gửi email xác thực (có thể do giới hạn domain):', verErr);
+      }
     } catch (authError: any) {
       if (authError.code === 'auth/email-already-in-use') {
         try {
@@ -1140,5 +1150,153 @@ export function subscribeToSchoolsRealtime(callback: (schools: School[]) => void
   } catch (e) {
     console.warn('Không thể thiết lập onSnapshot:', e);
     return () => {};
+  }
+}
+
+/**
+ * 7. BẢO VỆ PROFILE & CHỐNG LEO THANG QUYỀN HẠN (Profile Protection & Anti-Privilege Escalation)
+ * Kiểm tra kỹ chỉ cho phép cập nhật các trường an toàn: displayName, photoURL, phone.
+ * Loại bỏ/chặn mọi nỗ lực cập nhật trường 'role' và 'schoolId' từ phía Client.
+ */
+export async function updateUserProfileSafe(
+  uid: string,
+  updates: {
+    displayName?: string;
+    photoURL?: string;
+    phone?: string;
+    role?: any;
+    schoolId?: any;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  if (!uid) {
+    return { success: false, error: 'Thiếu UID người dùng cần cập nhật profile' };
+  }
+
+  // Lọc duy nhất các trường an toàn
+  const safeUpdates: Record<string, any> = {};
+  if (updates.displayName !== undefined) safeUpdates.displayName = updates.displayName.trim();
+  if (updates.photoURL !== undefined) safeUpdates.photoURL = updates.photoURL.trim();
+  if (updates.phone !== undefined) safeUpdates.phone = updates.phone.trim();
+
+  if (Object.keys(safeUpdates).length === 0) {
+    return {
+      success: false,
+      error: 'Cập nhật bị từ chối: Chỉ cho phép chỉnh sửa displayName, photoURL, phone. Trường role và schoolId đã bị chặn để chống leo thang quyền hạn!',
+    };
+  }
+
+  try {
+    const userDocRef = doc(db, USERS_COLLECTION, uid);
+    await updateDoc(userDocRef, {
+      ...safeUpdates,
+      updatedAt: serverTimestamp(),
+    });
+
+    const localUsers = getLocalUserRegistry();
+    const target = localUsers.find((u) => u.uid === uid);
+    if (target) {
+      if (safeUpdates.displayName) target.displayName = safeUpdates.displayName;
+      if (safeUpdates.phone) target.phone = safeUpdates.phone;
+      saveLocalUserRegistry(target);
+    }
+
+    console.log(`✅ [updateUserProfileSafe] Đã cập nhật profile an toàn cho UID: ${uid}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('❌ [updateUserProfileSafe] Lỗi:', err);
+    return { success: false, error: err.message || 'Không thể cập nhật profile người dùng.' };
+  }
+}
+
+/**
+ * 8. ĐĂNG XUẤT AN TOÀN (Secure Logout)
+ * Gọi signOut(auth), chủ động clear toàn bộ LocalStorage, SessionStorage và reset sạch Context State.
+ */
+export async function logoutUser(): Promise<void> {
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.warn('⚠️ [logoutUser] Lỗi khi gọi signOut Firebase Auth:', err);
+  } finally {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (e) {
+        console.warn('⚠️ [logoutUser] Lỗi clear storage:', e);
+      }
+    }
+  }
+}
+
+/**
+ * 9. BẢO VỆ MẬT KHẨU: Đổi mật khẩu tài khoản người dùng đang đăng nhập (updatePassword)
+ */
+export async function changeCurrentUserPassword(
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    return {
+      success: false,
+      message: 'Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!',
+    };
+  }
+
+  const cleanPass = newPassword ? newPassword.trim() : '';
+  if (cleanPass.length < 6) {
+    return {
+      success: false,
+      message: 'Mật khẩu mới phải chứa ít nhất 6 ký tự!',
+    };
+  }
+
+  try {
+    await updatePassword(currentUser, cleanPass);
+    return { success: true, message: '✓ Đổi mật khẩu thành công!' };
+  } catch (err: any) {
+    console.warn('⚠️ [changeCurrentUserPassword] Lỗi Firebase Auth:', err);
+    if (err.code === 'auth/requires-recent-login') {
+      return {
+        success: false,
+        message: 'Thao tác bảo mật yêu cầu xác thực gần đây. Vui lòng đăng xuất và đăng nhập lại trước khi thực hiện đổi mật khẩu!',
+      };
+    }
+    return {
+      success: false,
+      message: err.message || 'Không thể đổi mật khẩu lúc này. Vui lòng thử lại!',
+    };
+  }
+}
+
+/**
+ * 10. BẢO VỆ MẬT KHẨU: Gửi email đặt lại mật khẩu chuẩn luồng Firebase Auth (sendPasswordResetEmail)
+ */
+export async function sendFirebasePasswordReset(
+  email: string
+): Promise<{ success: boolean; message: string }> {
+  if (!email || !email.trim()) {
+    return { success: false, message: 'Vui lòng nhập địa chỉ Email tài khoản của bạn!' };
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    await sendPasswordResetEmail(auth, cleanEmail);
+    return {
+      success: true,
+      message: `✓ Đã gửi liên kết đặt lại mật khẩu đến email ${cleanEmail}. Vui lòng kiểm tra Hộp thư đến (hoặc Hộp thư Rác / Spam) để kích hoạt mật khẩu mới!`,
+    };
+  } catch (err: any) {
+    console.warn('⚠️ [sendFirebasePasswordReset] Lỗi:', err);
+    if (err.code === 'auth/user-not-found') {
+      return { success: false, message: 'Không tìm thấy tài khoản tương ứng với email đã nhập trên hệ thống Firebase Auth.' };
+    }
+    if (err.code === 'auth/invalid-email') {
+      return { success: false, message: 'Email nhập vào không đúng định dạng hợp lệ. Vui lòng kiểm tra lại!' };
+    }
+    return {
+      success: false,
+      message: err.message || 'Không thể gửi email đặt lại mật khẩu lúc này. Vui lòng thử lại sau!',
+    };
   }
 }
