@@ -1694,10 +1694,10 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
       {/* ========================================================================= */}
       {/* 1. TOP CONTROL TOOLBAR (THEO THIẾT KẾ TRÊN HÌNH)                          */}
       {/* ========================================================================= */}
-      <div className="p-3.5 bg-white rounded-2xl border border-slate-300 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-slate-800">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-300 shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-800">
+        <div className="flex flex-wrap items-center gap-1.5">
           {/* Auto scope: Trường / Lớp */}
-          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs">
             <span className="font-black text-slate-900">Auto:</span>
             <label className="flex items-center gap-1 cursor-pointer select-none">
               <input
@@ -1722,7 +1722,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
           </div>
 
           {/* Môn/Buổi */}
-          <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs">
             <span className="font-bold text-slate-700">Môn/Buổi:</span>
             <input
               type="number"
@@ -1730,7 +1730,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
               max={5}
               value={maxSubjectPerSession}
               onChange={(e) => setMaxSubjectPerSession(Number(e.target.value))}
-              className="w-10 bg-white border border-slate-300 rounded px-1.5 py-0.5 text-center font-black"
+              className="w-9 bg-white border border-slate-300 rounded px-1 py-0.5 text-center font-black text-xs"
             />
           </div>
 
@@ -1739,7 +1739,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
             <button
               onClick={handleUndo}
               disabled={undoStack.length === 0}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-xl border transition-all cursor-pointer ${
                 undoStack.length > 0
                   ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300'
                   : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
@@ -1753,7 +1753,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
             <button
               onClick={handleRedo}
               disabled={redoStack.length === 0}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-xl border transition-all cursor-pointer ${
                 redoStack.length > 0
                   ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300'
                   : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
@@ -1768,7 +1768,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
           {/* Nút Check NV (Nguyện vọng GV) */}
           <button
             onClick={() => setShowPreferenceModal(true)}
-            className="px-3.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-extrabold cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+            className="px-2.5 py-1.5 text-xs rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-extrabold cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
           >
             <Eye className="w-3.5 h-3.5 text-purple-700" />
             <span>Check NV</span>
@@ -1777,7 +1777,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
           {/* Nút Dồn Tiết */}
           <button
             onClick={handleCompactSchedule}
-            className="px-3.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-extrabold cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+            className="px-2.5 py-1.5 text-xs rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-extrabold cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
           >
             <ArrowRightLeft className="w-3.5 h-3.5 text-amber-700" />
             <span>Dồn tiết</span>
@@ -1786,7 +1786,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
           {/* Nút Auto Chạy TKB */}
           <button
             onClick={() => handleRunAuto(autoScope === 'CLASS' ? selectedClassId : undefined)}
-            className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black cursor-pointer transition-colors shadow-xs flex items-center gap-1.5"
+            className="px-3 py-1.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black cursor-pointer transition-colors shadow-xs flex items-center gap-1.5"
           >
             <Wand2 className="w-3.5 h-3.5" />
             <span>Tự Động Xếp ({autoScope === 'CLASS' ? 'Lớp Đang Chọn' : 'Toàn Trường'})</span>
@@ -1797,7 +1797,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
             type="button"
             onClick={() => handleAutoAssignAllClassesSHL(autoScope === 'CLASS' ? selectedClassId : undefined)}
             disabled={isSavingCloud}
-            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-60"
+            className="px-2.5 py-1.5 text-xs rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-60"
             title="Tự động phân tiết Sinh hoạt lớp vào Thứ 7 (Tiết 5 Sáng / Tiết 4 Chiều) cho toàn bộ GVCN và lưu trực tiếp lên Firebase"
           >
             <Sparkles className="w-3.5 h-3.5 text-slate-950" />
@@ -1809,7 +1809,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
             type="button"
             onClick={handleManualSaveCloud}
             disabled={isSavingCloud}
-            className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold cursor-pointer transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-60"
+            className="px-2.5 py-1.5 text-xs rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold cursor-pointer transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-60"
             title="Lưu trữ toàn bộ thời khóa biểu đang xếp của các lớp lên Firebase Firestore"
           >
             {isSavingCloud ? (
@@ -1817,7 +1817,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
             ) : (
               <Cloud className="w-3.5 h-3.5" />
             )}
-            <span>{isSavingCloud ? 'Đang lưu Cloud...' : 'Lưu TKB lên Firebase'}</span>
+            <span>{isSavingCloud ? 'Đang lưu...' : 'Lưu TKB lên Firebase'}</span>
             {lastSavedTime && !isSavingCloud && (
               <span className="text-[10px] font-normal opacity-85 hidden xl:inline">
                 ({lastSavedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
@@ -1830,7 +1830,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
             type="button"
             onClick={handleClearAllTimetable}
             disabled={isSavingCloud || slots.length === 0}
-            className="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-300 font-extrabold cursor-pointer transition-all shadow-2xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-2.5 py-1.5 text-xs rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-300 font-extrabold cursor-pointer transition-all shadow-2xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Xóa toàn bộ thời khóa biểu đang xếp của tất cả các lớp trên chương trình và Firebase Cloud"
           >
             <Trash2 className="w-3.5 h-3.5 text-rose-600" />
@@ -1921,11 +1921,11 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
       {/* ========================================================================= */}
       {/* 2. KHUNG NỘI DUNG CHÍNH (HAI CỘT: TRÁI = TKB LỚP, PHẢI = CHI TIẾT GIÁO VIÊN) */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      <div className="flex flex-col xl:flex-row gap-3 items-start w-full">
         {/* ======================================================================= */}
-        {/* CỘT TRÁI (CHIẾM 8 HOẶC 9 PHẦN): DANH SÁCH TKB CỦA CÁC LỚP               */}
+        {/* CỘT TRÁI: DANH SÁCH TKB CỦA CÁC LỚP                                     */}
         {/* ======================================================================= */}
-        <div className="xl:col-span-8 2xl:col-span-9 space-y-6">
+        <div className="flex-1 min-w-0 w-full space-y-6">
           {activeClasses.map((cls) => {
             const classAssignments = getClassAssignments(cls.id);
             const shlAssignment = classAssignments.find(
@@ -2000,23 +2000,23 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
               >
                 {/* BẢNG TKB CỦA LỚP */}
                 <div className="overflow-x-auto w-full max-w-full custom-scrollbar pb-1">
-                  <table className="w-full min-w-[760px] sm:min-w-[850px] border-collapse text-xs text-center">
+                  <table className="w-full table-fixed border-collapse text-xs text-center">
                     <thead>
-                      <tr className="bg-slate-50 border-b-2 border-slate-300 text-slate-800 font-black text-[11px] uppercase">
-                        <th className="py-2.5 px-2 w-14 border-r border-slate-200">Lớp</th>
-                        <th className="py-2.5 px-1.5 w-12 border-r border-slate-200">Buổi</th>
-                        <th className="py-2.5 px-1.5 w-12 border-r border-slate-200">Tiết</th>
-                        <th className="py-2.5 px-2 w-24 sm:w-28 border-r border-slate-200">Thời gian</th>
+                      <tr className="bg-slate-50 border-b-2 border-slate-300 text-slate-800 font-black text-[10px] sm:text-[11px] uppercase">
+                        <th className="py-1.5 px-0.5 w-14 sm:w-16 border-r border-slate-200">Lớp</th>
+                        <th className="py-1.5 px-0.5 w-9 sm:w-10 border-r border-slate-200">Buổi</th>
+                        <th className="py-1.5 px-0.5 w-9 sm:w-10 border-r border-slate-200">Tiết</th>
+                        <th className="py-1.5 px-0.5 w-16 sm:w-18 border-r border-slate-200">Thời gian</th>
                         {DAYS.map(({ key, label }) => (
-                          <th key={key} className="py-2.5 px-2 border-r border-slate-200 min-w-[100px] sm:min-w-[115px]">
+                          <th key={key} className="py-1.5 px-0.5 border-r border-slate-200">
                             {label}
                           </th>
                         ))}
-                        <th className="py-2.5 px-2 w-14 text-center">
+                        <th className="py-1.5 px-0.5 w-9 sm:w-10 text-center">
                           <button
                             type="button"
                             onClick={() => handleClearClassTimetable(cls.id)}
-                            className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] cursor-pointer shadow-2xs transition-colors"
+                            className="px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] cursor-pointer shadow-2xs transition-colors"
                             title={`Xóa toàn bộ thời khóa biểu của lớp ${cls.name}`}
                           >
                             Xóa
@@ -2032,17 +2032,19 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                           {idx === 0 && (
                             <td
                               rowSpan={5}
-                              className="p-2 border-r border-slate-300 bg-slate-50/50 align-top text-center"
+                              className="p-1 border-r border-slate-300 bg-slate-50/50 align-top text-center"
                             >
-                              <div className="space-y-2 flex flex-col items-center justify-start h-full">
+                              <div className="space-y-1.5 flex flex-col items-center justify-start h-full">
                                 <button
                                   type="button"
                                   onClick={() => setSelectedClassId(cls.id)}
-                                  className="px-2.5 py-1 rounded-md bg-rose-500 hover:bg-rose-600 text-white font-black text-[10px] shadow-2xs cursor-pointer"
+                                  className="px-2 py-0.5 rounded-md bg-rose-500 hover:bg-rose-600 text-white font-black text-[9px] shadow-2xs cursor-pointer"
                                 >
                                   Sửa
                                 </button>
-                                <div className="font-black text-indigo-950 text-sm mt-1">{cls.name}</div>
+                                <div className="font-black text-indigo-950 text-[11px] sm:text-xs mt-0.5 leading-tight text-center break-words max-w-full" title={cls.name}>
+                                  {cls.name}
+                                </div>
                               </div>
                             </td>
                           )}
@@ -2051,20 +2053,20 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                           {idx === 0 && (
                             <td
                               rowSpan={5}
-                              className="p-2 border-r border-slate-300 bg-slate-50 font-black text-slate-800 text-center"
+                              className="p-1 border-r border-slate-300 bg-slate-50 font-black text-slate-800 text-[11px] text-center"
                             >
                               Sáng
                             </td>
                           )}
 
                           {/* Cột Tiết */}
-                          <td className="py-2 px-2 border-r border-slate-200 font-black text-slate-700">
+                          <td className="py-1 px-0.5 border-r border-slate-200 font-black text-[11px] text-slate-700">
                             {period.label}
                           </td>
 
                           {/* Cột Thời gian */}
-                          <td className="py-2 px-2 border-r border-slate-200 font-normal text-[11px] text-slate-500">
-                            {period.time}
+                          <td className="py-1 px-0.5 border-r border-slate-200 font-normal text-[10px] text-slate-500 whitespace-nowrap truncate" title={period.time}>
+                            {period.time.replace(' - ', '-').replace(':00', 'h00').replace(':', 'h')}
                           </td>
 
                           {/* Các ngày Thứ 2 -> Thứ 7 */}
@@ -2161,7 +2163,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                     ? 'Tiết 1 Sáng Thứ 2 (Click để khôi phục tiết Chào cờ hoặc xếp môn)'
                                     : undefined
                                 }
-                                className={`py-2 px-1 border-r border-slate-200 cursor-pointer select-none transition-all relative ${
+                                className={`py-1 px-0.5 border-r border-slate-200 cursor-pointer select-none transition-all relative ${
                                   isSelectedSubjectSlot
                                     ? 'bg-rose-300 hover:bg-rose-400 text-rose-950 font-black shadow-inner'
                                     : isOff
@@ -2187,12 +2189,12 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                               >
                                 {slot ? (
                                   isOff ? (
-                                    <span className="text-[11px] italic font-bold">Nghỉ</span>
+                                    <span className="text-[10px] italic font-bold">Nghỉ</span>
                                   ) : isSlotCC ? (
-                                    <div className="relative group/cc w-full h-full flex items-center justify-center gap-1 px-1 py-0.5">
-                                      <div className="leading-tight flex items-center justify-center gap-1">
-                                        <span className="text-xs">🚩</span>
-                                        <span className="text-xs font-black text-amber-950">Chào cờ</span>
+                                    <div className="relative group/cc w-full h-full flex items-center justify-center gap-0.5 px-0.5 py-0.5">
+                                      <div className="leading-tight flex items-center justify-center gap-0.5">
+                                        <span className="text-[10px]">🚩</span>
+                                        <span className="text-[11px] font-black text-amber-950 truncate">Chào cờ</span>
                                       </div>
                                       <button
                                         type="button"
@@ -2200,61 +2202,61 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                         className="p-0.5 rounded text-amber-800 hover:text-rose-700 hover:bg-amber-200/90 transition-colors cursor-pointer shrink-0 opacity-80 hover:opacity-100"
                                         title="Xóa tiết Chào cờ tuần này (có tùy chọn đẩy tiết khác lên)"
                                       >
-                                        <Trash2 className="w-3 h-3" />
+                                        <Trash2 className="w-2.5 h-2.5" />
                                       </button>
                                     </div>
                                   ) : (
                                     <div className="leading-tight">
-                                      <div className={`text-xs ${isSlotShl ? 'font-black text-indigo-950' : isSlotIncomplete ? 'font-black text-amber-950' : 'font-black text-slate-900'} flex items-center justify-center gap-0.5`}>
-                                        <span>{displaySubjectName}</span>
+                                      <div className={`text-[11px] ${isSlotShl ? 'font-black text-indigo-950' : isSlotIncomplete ? 'font-black text-amber-950' : 'font-black text-slate-900'} flex items-center justify-center gap-0.5 truncate`}>
+                                        <span className="truncate">{displaySubjectName}</span>
                                         {isSlotIncomplete && (
                                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 inline-block" title="Môn này chưa xếp đủ số tiết phân công" />
                                         )}
                                       </div>
                                       {isSlotTeacherUnavailable && (
-                                        <span className="text-[9px] font-black text-rose-800 bg-rose-100 px-1 py-0.5 rounded border border-rose-300 block truncate mt-0.5" title="Cảnh báo: Giáo viên đã đăng ký lịch bận/nguyện vọng nghỉ vào tiết này!">
+                                        <span className="text-[8px] font-black text-rose-800 bg-rose-100 px-0.5 py-0.2 rounded border border-rose-300 block truncate mt-0.5" title="Cảnh báo: Giáo viên đã đăng ký lịch bận/nguyện vọng nghỉ vào tiết này!">
                                           ⚠️ GV Bận
                                         </span>
                                       )}
                                     </div>
                                   )
                                 ) : isSelectedTeacherUnavailable ? (
-                                  <span className="text-[10px] text-rose-700 font-extrabold flex items-center justify-center gap-0.5">
-                                    <span className="text-[9px]">⚠️</span>Bận
+                                  <span className="text-[9px] text-rose-700 font-extrabold flex items-center justify-center gap-0.5">
+                                    <span>⚠️</span>Bận
                                   </span>
                                 ) : teacherConflictAtCell ? (
-                                  <span className="text-[10px] text-amber-800 font-extrabold flex items-center justify-center gap-0.5">
-                                    <span className="text-[9px]">⚠️</span>Dạy Lớp Khác
+                                  <span className="text-[9px] text-amber-800 font-extrabold flex items-center justify-center gap-0.5 truncate">
+                                    <span>⚠️</span>Dạy Lớp Khác
                                   </span>
                                 ) : day === 2 && period.period === 1 ? (
                                   <div className="relative group/cc w-full h-full flex flex-col items-center justify-center py-0.5">
-                                    <span className="text-slate-400 group-hover/cc:hidden font-light">+</span>
+                                    <span className="text-slate-400 group-hover/cc:hidden font-light text-[10px]">+</span>
                                     <button
                                       type="button"
                                       onClick={(e) => handleRestoreChaoCo(cls.id, e)}
-                                      className="hidden group-hover/cc:inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[9px] cursor-pointer shadow-2xs"
+                                      className="hidden group-hover/cc:inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[8px] cursor-pointer shadow-2xs"
                                       title="Đặt lại tiết Chào cờ cố định cho Thứ 2 Tiết 1"
                                     >
-                                      <span>🚩</span>+Chào cờ
+                                      <span>🚩</span>+CC
                                     </button>
                                   </div>
                                 ) : (
-                                  <span className="text-transparent hover:text-slate-300 font-light">+</span>
+                                  <span className="text-transparent hover:text-slate-300 font-light text-[10px]">+</span>
                                 )}
                               </td>
                             );
                           })}
 
                           {/* Cột Thao tác xóa nhanh tiết hàng này */}
-                          <td className="py-2 px-1 text-center">
+                          <td className="py-1 px-0.5 text-center">
                             {DAYS.some(({ key: day }) => !!getSlot(cls.id, day, 'MORNING', period.period)) ? (
                               <button
                                 type="button"
                                 onClick={() => handleClearPeriodForClass(cls.id, 'MORNING', period.period)}
-                                className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer inline-flex items-center justify-center"
+                                className="p-0.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer inline-flex items-center justify-center"
                                 title={`Xóa các tiết trong hàng Sáng ${period.label} của lớp ${cls.name}`}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3 h-3" />
                               </button>
                             ) : (
                               <span className="text-[10px] text-slate-300">-</span>
@@ -2275,15 +2277,15 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                           {idx === 0 && (
                             <td
                               rowSpan={4}
-                              className="p-2 border-r border-slate-300 bg-slate-50/50 align-middle text-center"
+                              className="p-1 border-r border-slate-300 bg-slate-50/50 align-middle text-center"
                             >
                               <button
                                 type="button"
                                 onClick={() => handleRunAuto(cls.id)}
-                                className="px-2.5 py-1 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] shadow-2xs cursor-pointer flex items-center justify-center gap-1 mx-auto"
+                                className="px-1.5 py-0.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-black text-[9px] shadow-2xs cursor-pointer flex items-center justify-center gap-0.5 mx-auto"
                                 title="Tự động xếp TKB cho lớp này"
                               >
-                                <Wand2 className="w-3 h-3" />
+                                <Wand2 className="w-2.5 h-2.5" />
                                 <span>Auto</span>
                               </button>
                             </td>
@@ -2293,20 +2295,20 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                           {idx === 0 && (
                             <td
                               rowSpan={4}
-                              className="p-2 border-r border-slate-300 bg-slate-50 font-black text-slate-800 text-center"
+                              className="p-1 border-r border-slate-300 bg-slate-50 font-black text-slate-800 text-[11px] text-center"
                             >
                               Chiều
                             </td>
                           )}
 
                           {/* Cột Tiết */}
-                          <td className="py-2 px-2 border-r border-slate-200 font-black text-slate-700">
+                          <td className="py-1 px-0.5 border-r border-slate-200 font-black text-[11px] text-slate-700">
                             {period.label}
                           </td>
 
                           {/* Cột Thời gian */}
-                          <td className="py-2 px-2 border-r border-slate-200 font-normal text-[11px] text-slate-500">
-                            {period.time}
+                          <td className="py-1 px-0.5 border-r border-slate-200 font-normal text-[10px] text-slate-500 whitespace-nowrap truncate" title={period.time}>
+                            {period.time.replace(' - ', '-').replace(':00', 'h00').replace(':', 'h')}
                           </td>
 
                           {/* Các ngày Thứ 2 -> Thứ 7 */}
@@ -2389,7 +2391,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                       : `${subObj?.name || slot.subjectId} (✓ Đủ ${slotAsg?.periodsPerWeek || ''} tiết)`
                                     : undefined
                                 }
-                                className={`py-2 px-1 border-r border-slate-200 cursor-pointer select-none transition-all relative ${
+                                className={`py-1 px-0.5 border-r border-slate-200 cursor-pointer select-none transition-all relative ${
                                   isSelectedSubjectSlot
                                     ? 'bg-rose-300 hover:bg-rose-400 text-rose-950 font-black shadow-inner'
                                     : isOff
@@ -2413,47 +2415,47 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                               >
                                 {slot ? (
                                   isOff ? (
-                                    <span className="text-[11px] italic font-bold">Nghỉ</span>
+                                    <span className="text-[10px] italic font-bold">Nghỉ</span>
                                   ) : (
                                     <div className="leading-tight">
-                                      <div className={`text-xs ${isSlotShl ? 'font-black text-indigo-950' : isSlotIncomplete ? 'font-black text-amber-950' : 'font-black text-slate-900'} flex items-center justify-center gap-0.5`}>
-                                        <span>{displaySubjectName}</span>
+                                      <div className={`text-[11px] ${isSlotShl ? 'font-black text-indigo-950' : isSlotIncomplete ? 'font-black text-amber-950' : 'font-black text-slate-900'} flex items-center justify-center gap-0.5 truncate`}>
+                                        <span className="truncate">{displaySubjectName}</span>
                                         {isSlotIncomplete && (
                                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 inline-block" title="Môn này chưa xếp đủ số tiết phân công" />
                                         )}
                                       </div>
                                       {isSlotTeacherUnavailable && (
-                                        <span className="text-[9px] font-black text-rose-800 bg-rose-100 px-1 py-0.5 rounded border border-rose-300 block truncate mt-0.5" title="Cảnh báo: Giáo viên đã đăng ký lịch bận/nguyện vọng nghỉ vào tiết này!">
+                                        <span className="text-[8px] font-black text-rose-800 bg-rose-100 px-0.5 py-0.2 rounded border border-rose-300 block truncate mt-0.5" title="Cảnh báo: Giáo viên đã đăng ký lịch bận/nguyện vọng nghỉ vào tiết này!">
                                           ⚠️ GV Bận
                                         </span>
                                       )}
                                     </div>
                                   )
                                 ) : isSelectedTeacherUnavailable ? (
-                                  <span className="text-[10px] text-rose-700 font-extrabold flex items-center justify-center gap-0.5">
-                                    <span className="text-[9px]">⚠️</span>Bận
+                                  <span className="text-[9px] text-rose-700 font-extrabold flex items-center justify-center gap-0.5">
+                                    <span>⚠️</span>Bận
                                   </span>
                                 ) : teacherConflictAtCell ? (
-                                  <span className="text-[10px] text-amber-800 font-extrabold flex items-center justify-center gap-0.5">
-                                    <span className="text-[9px]">⚠️</span>Dạy Lớp Khác
+                                  <span className="text-[9px] text-amber-800 font-extrabold flex items-center justify-center gap-0.5 truncate">
+                                    <span>⚠️</span>Dạy Lớp Khác
                                   </span>
                                 ) : (
-                                  <span className="text-transparent hover:text-slate-300 font-light">+</span>
+                                  <span className="text-transparent hover:text-slate-300 font-light text-[10px]">+</span>
                                 )}
                               </td>
                             );
                           })}
 
                           {/* Cột Thao tác xóa nhanh tiết hàng này */}
-                          <td className="py-2 px-1 text-center">
+                          <td className="py-1 px-0.5 text-center">
                             {DAYS.some(({ key: day }) => !!getSlot(cls.id, day, 'AFTERNOON', period.period)) ? (
                               <button
                                 type="button"
                                 onClick={() => handleClearPeriodForClass(cls.id, 'AFTERNOON', period.period)}
-                                className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer inline-flex items-center justify-center"
+                                className="p-0.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer inline-flex items-center justify-center"
                                 title={`Xóa các tiết trong hàng Chiều ${period.label} của lớp ${cls.name}`}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3 h-3" />
                               </button>
                             ) : (
                               <span className="text-[10px] text-slate-300">-</span>
@@ -2484,7 +2486,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                       <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
                         <span className="font-black text-slate-800 uppercase flex items-center gap-1.5">
                           <BookOpen className="w-4 h-4 text-indigo-600" />
-                          <span>Bảng Môn Học & Phân Công Của Lớp {cls.name}</span>
+                          <span>Bảng Môn Học & Phân Công Của {cls.name.toLowerCase().startsWith('lớp') ? cls.name : `Lớp ${cls.name}`}</span>
                         </span>
                         <div className="flex items-center gap-2 font-extrabold text-slate-600 flex-wrap">
                           <span>
@@ -2894,10 +2896,10 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
         </div>
 
         {/* ======================================================================= */}
-        {/* CỘT PHẢI (CHIẾM 4 HOẶC 3 PHẦN): CHI TIẾT GIÁO VIÊN & LỊCH GIẢNG DẠY      */}
+        {/* CỘT PHẢI: CHI TIẾT GIÁO VIÊN & LỊCH GIẢNG DẠY                             */}
         {/* ======================================================================= */}
-        <div className="xl:col-span-4 2xl:col-span-3 space-y-4 sticky top-4">
-          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm p-4 space-y-4">
+        <div className="w-full xl:w-[260px] shrink-0 space-y-3 sticky top-4">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm p-3 space-y-3">
             {/* Header: Tên GV - Tên Môn - Số tiết / Nút Auto */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="font-black text-xs text-slate-900 truncate">
