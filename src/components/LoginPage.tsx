@@ -524,9 +524,11 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
 
               {/* Error Message Alert */}
               {errorMsg && (
-                <div className="mb-4 p-3.5 rounded-2xl bg-rose-950/80 border border-rose-800/80 flex items-start gap-2.5 text-xs text-rose-200 animate-shake">
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <div className="flex-1 font-medium leading-relaxed">{errorMsg}</div>
+                <div className="mb-4 p-4 rounded-2xl bg-rose-950/80 border border-rose-800/80 flex items-start gap-3 text-xs text-rose-200 animate-shake shadow-lg shadow-rose-950/40">
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 font-medium leading-relaxed whitespace-pre-line">
+                    {errorMsg}
+                  </div>
                 </div>
               )}
 
