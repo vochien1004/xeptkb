@@ -537,223 +537,231 @@ export const ExportTimetableView: React.FC<Props> = ({
       {/* KHU VỰC HIỂN THỊ XEM TRƯỚC VÀ IN ẤN */}
       <div
         ref={printAreaRef}
-        className="bg-white rounded-2xl border-2 border-slate-300 shadow-md p-3 sm:p-5 md:p-6 overflow-x-auto max-w-full custom-scrollbar print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none"
+        className="bg-white rounded-2xl border-2 border-slate-300 shadow-md p-2 sm:p-4 md:p-6 w-full max-w-full overflow-hidden print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none"
       >
         {/* ========================================================================= */}
         {/* CHẾ ĐỘ 1: XEM TKB TOÀN TRƯỜNG (SHEET 1) */}
         {/* ========================================================================= */}
         {viewMode === 'SCHOOL' && (
-          <div className="space-y-8 w-full min-w-[800px] sm:min-w-[950px] md:min-w-[1050px]">
+          <div className="space-y-6 sm:space-y-8 w-full max-w-full overflow-hidden">
             {/* BẢNG BUỔI SÁNG */}
             {(schoolShiftFilter === 'BOTH' || schoolShiftFilter === 'MORNING') && (
-              <div className="space-y-3">
+              <div className="space-y-3 w-full">
                 {/* Header Buổi sáng */}
-                <div className="flex items-start justify-between pb-2 border-b-2 border-slate-900">
-                  <div>
-                    <h2 className="text-sm sm:text-base font-black text-slate-950 uppercase">
+                <div className="flex items-start justify-between pb-2 border-b-2 border-slate-900 gap-2">
+                  <div className="shrink-0">
+                    <h2 className="text-xs sm:text-sm md:text-base font-black text-slate-950 uppercase">
                       {schoolName}
                     </h2>
-                    <div className="text-xs font-black text-slate-800 uppercase mt-0.5">
+                    <div className="text-[10px] sm:text-xs font-black text-slate-800 uppercase mt-0.5">
                       {semesterYear}
                     </div>
                   </div>
 
-                  <div className="text-center">
-                    <h1 className="text-lg sm:text-xl font-black text-slate-950 uppercase tracking-wide">
+                  <div className="text-center flex-1 min-w-0 px-2">
+                    <h1 className="text-sm sm:text-lg md:text-xl font-black text-slate-950 uppercase tracking-wide truncate">
                       THỜI KHOÁ BIỂU BUỔI SÁNG
                     </h1>
-                    <div className="text-xs font-black text-slate-700 uppercase mt-0.5">
+                    <div className="text-[10px] sm:text-xs font-black text-slate-700 uppercase mt-0.5 truncate">
                       {weekInfo} • CÓ TÁC DỤNG TỪ NGÀY: {effectiveDate}
                     </div>
                   </div>
 
-                  <div className="w-28 text-right text-[10px] font-bold text-slate-500">
+                  <div className="shrink-0 text-right text-[10px] font-bold text-slate-500 hidden sm:block">
                     TKB Engine Pro
                   </div>
                 </div>
 
                 {/* Bảng ma trận lớp Buổi Sáng */}
-                <table className="w-full border-collapse border-2 border-slate-900 text-center text-[11px] leading-tight">
-                  <thead>
-                    <tr className="border-b-2 border-slate-900">
-                      <th
-                        rowSpan={1}
-                        colSpan={2}
-                        className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-2 py-2 text-xs w-20"
-                      >
-                        Lớp / Tiết
-                      </th>
-                      {targetClasses.map((cls) => (
+                <div className="w-full overflow-hidden rounded-lg">
+                  <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-[10px] sm:text-[11px] md:text-xs leading-tight">
+                    <thead>
+                      <tr className="border-b-2 border-slate-900">
                         <th
-                          key={cls.id}
-                          className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-1 py-2 text-xs uppercase"
+                          rowSpan={1}
+                          colSpan={2}
+                          className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 sm:px-2 py-1.5 sm:py-2 text-[10px] sm:text-xs w-16 sm:w-20 md:w-24"
                         >
-                          {cls.name}
+                          Lớp / Tiết
                         </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {DAYS_OF_WEEK.map(({ key: day, label }) => {
-                      return PERIODS.map(({ period }, periodIdx) => {
-                        const isFirst = periodIdx === 0;
-                        return (
-                          <tr
-                            key={`morning_${day}_${period}`}
-                            className={`border-b border-slate-900 hover:bg-slate-50 ${
-                              period === 5 ? 'border-b-4 border-slate-900' : ''
-                            }`}
+                        {targetClasses.map((cls) => (
+                          <th
+                            key={cls.id}
+                            className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-0.5 sm:px-1 py-1.5 sm:py-2 text-[10px] sm:text-xs uppercase truncate"
+                            title={cls.name}
                           >
-                            {isFirst && (
-                              <td
-                                rowSpan={5}
-                                className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black p-1 text-center align-middle w-12"
-                              >
-                                <div className="font-black text-xs uppercase tracking-wider py-2">
-                                  {label}
-                                </div>
-                              </td>
-                            )}
-                            <td className="border-r-2 border-slate-900 font-black text-xs text-slate-950 bg-slate-100 p-1 w-8">
-                              {period}
-                            </td>
-                            {targetClasses.map((cls) => {
-                              const content = getCellContentForClass(
-                                slots,
-                                subjectsMap,
-                                teachersMap,
-                                classes,
-                                day,
-                                period,
-                                cls.id,
-                                'MORNING'
-                              );
-                              const isCC = content === 'Chào cờ';
-                              return (
+                            {cls.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DAYS_OF_WEEK.map(({ key: day, label }) => {
+                        return PERIODS.map(({ period }, periodIdx) => {
+                          const isFirst = periodIdx === 0;
+                          return (
+                            <tr
+                              key={`morning_${day}_${period}`}
+                              className={`border-b border-slate-900 hover:bg-slate-50 ${
+                                period === 5 ? 'border-b-4 border-slate-900' : ''
+                              }`}
+                            >
+                              {isFirst && (
                                 <td
-                                  key={cls.id}
-                                  className={`border-r border-slate-900 last:border-r-0 p-1 font-bold align-middle min-w-[70px] ${
-                                    isCC
-                                      ? 'bg-amber-100 text-amber-950 font-black'
-                                      : content
-                                      ? 'text-slate-950'
-                                      : 'text-slate-300'
-                                  }`}
+                                  rowSpan={5}
+                                  className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black p-0.5 sm:p-1 text-center align-middle w-10 sm:w-12 md:w-14"
                                 >
-                                  {content || '-'}
+                                  <div className="font-black text-[10px] sm:text-xs uppercase tracking-wider py-1 sm:py-2">
+                                    {label}
+                                  </div>
                                 </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      });
-                    })}
-                  </tbody>
-                </table>
+                              )}
+                              <td className="border-r-2 border-slate-900 font-black text-[10px] sm:text-xs text-slate-950 bg-slate-100 p-0.5 sm:p-1 w-6 sm:w-8 md:w-10">
+                                {period}
+                              </td>
+                              {targetClasses.map((cls) => {
+                                const content = getCellContentForClass(
+                                  slots,
+                                  subjectsMap,
+                                  teachersMap,
+                                  classes,
+                                  day,
+                                  period,
+                                  cls.id,
+                                  'MORNING'
+                                );
+                                const isCC = content === 'Chào cờ';
+                                return (
+                                  <td
+                                    key={cls.id}
+                                    title={content || ''}
+                                    className={`border-r border-slate-900 last:border-r-0 px-0.5 sm:px-1 py-1 sm:py-1.5 font-bold align-middle truncate ${
+                                      isCC
+                                        ? 'bg-amber-100 text-amber-950 font-black'
+                                        : content
+                                        ? 'text-slate-950'
+                                        : 'text-slate-300'
+                                    }`}
+                                  >
+                                    {content || '-'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        });
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
             {/* BẢNG BUỔI CHIỀU */}
             {(schoolShiftFilter === 'BOTH' || schoolShiftFilter === 'AFTERNOON') && (
-              <div className="space-y-3 pt-4 border-t-4 border-slate-300 print:pt-6 print:border-t-2 print:page-break-before-always">
+              <div className="space-y-3 pt-4 border-t-4 border-slate-300 print:pt-6 print:border-t-2 print:page-break-before-always w-full">
                 {/* Header Buổi Chiều */}
-                <div className="flex items-start justify-between pb-2 border-b-2 border-slate-900">
-                  <div>
-                    <h2 className="text-sm sm:text-base font-black text-slate-950 uppercase">
+                <div className="flex items-start justify-between pb-2 border-b-2 border-slate-900 gap-2">
+                  <div className="shrink-0">
+                    <h2 className="text-xs sm:text-sm md:text-base font-black text-slate-950 uppercase">
                       {schoolName}
                     </h2>
-                    <div className="text-xs font-black text-slate-800 uppercase mt-0.5">
+                    <div className="text-[10px] sm:text-xs font-black text-slate-800 uppercase mt-0.5">
                       {semesterYear}
                     </div>
                   </div>
 
-                  <div className="text-center">
-                    <h1 className="text-lg sm:text-xl font-black text-slate-950 uppercase tracking-wide">
+                  <div className="text-center flex-1 min-w-0 px-2">
+                    <h1 className="text-sm sm:text-lg md:text-xl font-black text-slate-950 uppercase tracking-wide truncate">
                       THỜI KHOÁ BIỂU BUỔI CHIỀU
                     </h1>
-                    <div className="text-xs font-black text-slate-700 uppercase mt-0.5">
+                    <div className="text-[10px] sm:text-xs font-black text-slate-700 uppercase mt-0.5 truncate">
                       {weekInfo} • CÓ TÁC DỤNG TỪ NGÀY: {effectiveDate}
                     </div>
                   </div>
 
-                  <div className="w-28 text-right text-[10px] font-bold text-slate-500">
+                  <div className="shrink-0 text-right text-[10px] font-bold text-slate-500 hidden sm:block">
                     TKB Engine Pro
                   </div>
                 </div>
 
                 {/* Bảng ma trận lớp Buổi Chiều */}
-                <table className="w-full border-collapse border-2 border-slate-900 text-center text-[11px] leading-tight">
-                  <thead>
-                    <tr className="border-b-2 border-slate-900">
-                      <th
-                        rowSpan={1}
-                        colSpan={2}
-                        className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-2 py-2 text-xs w-20"
-                      >
-                        Lớp / Tiết
-                      </th>
-                      {targetClasses.map((cls) => (
+                <div className="w-full overflow-hidden rounded-lg">
+                  <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-[10px] sm:text-[11px] md:text-xs leading-tight">
+                    <thead>
+                      <tr className="border-b-2 border-slate-900">
                         <th
-                          key={cls.id}
-                          className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-1 py-2 text-xs uppercase"
+                          rowSpan={1}
+                          colSpan={2}
+                          className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 sm:px-2 py-1.5 sm:py-2 text-[10px] sm:text-xs w-16 sm:w-20 md:w-24"
                         >
-                          {cls.name}
+                          Lớp / Tiết
                         </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {DAYS_OF_WEEK.map(({ key: day, label }) => {
-                      return PERIODS.map(({ period }, periodIdx) => {
-                        const isFirst = periodIdx === 0;
-                        return (
-                          <tr
-                            key={`afternoon_${day}_${period}`}
-                            className={`border-b border-slate-900 hover:bg-slate-50 ${
-                              period === 5 ? 'border-b-4 border-slate-900' : ''
-                            }`}
+                        {targetClasses.map((cls) => (
+                          <th
+                            key={cls.id}
+                            className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-0.5 sm:px-1 py-1.5 sm:py-2 text-[10px] sm:text-xs uppercase truncate"
+                            title={cls.name}
                           >
-                            {isFirst && (
-                              <td
-                                rowSpan={5}
-                                className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black p-1 text-center align-middle w-12"
-                              >
-                                <div className="font-black text-xs uppercase tracking-wider py-2">
-                                  {label}
-                                </div>
-                              </td>
-                            )}
-                            <td className="border-r-2 border-slate-900 font-black text-xs text-slate-950 bg-slate-100 p-1 w-8">
-                              {period}
-                            </td>
-                            {targetClasses.map((cls) => {
-                              const content = getCellContentForClass(
-                                slots,
-                                subjectsMap,
-                                teachersMap,
-                                classes,
-                                day,
-                                period,
-                                cls.id,
-                                'AFTERNOON'
-                              );
-                              return (
+                            {cls.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DAYS_OF_WEEK.map(({ key: day, label }) => {
+                        return PERIODS.map(({ period }, periodIdx) => {
+                          const isFirst = periodIdx === 0;
+                          return (
+                            <tr
+                              key={`afternoon_${day}_${period}`}
+                              className={`border-b border-slate-900 hover:bg-slate-50 ${
+                                period === 5 ? 'border-b-4 border-slate-900' : ''
+                              }`}
+                            >
+                              {isFirst && (
                                 <td
-                                  key={cls.id}
-                                  className={`border-r border-slate-900 last:border-r-0 p-1 font-bold align-middle min-w-[70px] ${
-                                    content ? 'text-slate-950' : 'text-slate-300'
-                                  }`}
+                                  rowSpan={5}
+                                  className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black p-0.5 sm:p-1 text-center align-middle w-10 sm:w-12 md:w-14"
                                 >
-                                  {content || '-'}
+                                  <div className="font-black text-[10px] sm:text-xs uppercase tracking-wider py-1 sm:py-2">
+                                    {label}
+                                  </div>
                                 </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      });
-                    })}
-                  </tbody>
-                </table>
+                              )}
+                              <td className="border-r-2 border-slate-900 font-black text-[10px] sm:text-xs text-slate-950 bg-slate-100 p-0.5 sm:p-1 w-6 sm:w-8 md:w-10">
+                                {period}
+                              </td>
+                              {targetClasses.map((cls) => {
+                                const content = getCellContentForClass(
+                                  slots,
+                                  subjectsMap,
+                                  teachersMap,
+                                  classes,
+                                  day,
+                                  period,
+                                  cls.id,
+                                  'AFTERNOON'
+                                );
+                                return (
+                                  <td
+                                    key={cls.id}
+                                    title={content || ''}
+                                    className={`border-r border-slate-900 last:border-r-0 px-0.5 sm:px-1 py-1 sm:py-1.5 font-bold align-middle truncate ${
+                                      content ? 'text-slate-950' : 'text-slate-300'
+                                    }`}
+                                  >
+                                    {content || '-'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        });
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -808,16 +816,16 @@ export const ExportTimetableView: React.FC<Props> = ({
                   </div>
 
                   {/* BẢNG BUỔI SÁNG & BUỔI CHIỀU CỦA LỚP */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 w-full">
                     {/* Buổi Sáng */}
-                    <div>
+                    <div className="w-full overflow-hidden rounded-lg">
                       <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi sáng
                       </div>
-                      <table className="w-full border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
@@ -836,7 +844,7 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`cls_m_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
@@ -854,7 +862,8 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={day}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 p-1.5 font-bold ${
+                                    title={val || ''}
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
                                       isCC
                                         ? 'bg-amber-100 text-amber-950 font-black'
                                         : val
@@ -873,14 +882,14 @@ export const ExportTimetableView: React.FC<Props> = ({
                     </div>
 
                     {/* Buổi Chiều */}
-                    <div>
+                    <div className="w-full overflow-hidden rounded-lg">
                       <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi chiều
                       </div>
-                      <table className="w-full border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
@@ -899,7 +908,7 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`cls_a_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
@@ -916,7 +925,8 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={day}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 p-1.5 font-bold ${
+                                    title={val || ''}
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
                                       val ? 'text-slate-950' : 'text-slate-300'
                                     }`}
                                   >
@@ -975,16 +985,16 @@ export const ExportTimetableView: React.FC<Props> = ({
                   </div>
 
                   {/* BẢNG BUỔI SÁNG & BUỔI CHIỀU CỦA GIÁO VIÊN */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 w-full">
                     {/* Buổi Sáng */}
-                    <div>
+                    <div className="w-full overflow-hidden rounded-lg">
                       <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi sáng
                       </div>
-                      <table className="w-full border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
@@ -1003,7 +1013,7 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`t_m_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
@@ -1019,7 +1029,8 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={day}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 p-1.5 font-bold ${
+                                    title={val || ''}
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
                                       val ? 'text-slate-950 font-black' : 'text-slate-300'
                                     }`}
                                   >
@@ -1034,14 +1045,14 @@ export const ExportTimetableView: React.FC<Props> = ({
                     </div>
 
                     {/* Buổi Chiều */}
-                    <div>
+                    <div className="w-full overflow-hidden rounded-lg">
                       <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi chiều
                       </div>
-                      <table className="w-full border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
@@ -1060,7 +1071,7 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`t_a_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
@@ -1076,7 +1087,8 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={day}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 p-1.5 font-bold ${
+                                    title={val || ''}
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
                                       val ? 'text-slate-950 font-black' : 'text-slate-300'
                                     }`}
                                   >
