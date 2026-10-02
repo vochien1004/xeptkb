@@ -53,7 +53,9 @@ import { RenewalRequestModal } from './components/RenewalRequestModal';
 import { BackupDataPayload } from './services/BackupService';
 import { School, UserProfile, RenewalRequest } from './types/school';
 import { checkSchoolAccess, getAllSchools } from './services/schoolService';
-import { fetchSchoolRenewalRequests } from './services/renewalService';
+import { fetchSchoolRenewalRequests, subscribeToRenewalRequestsRealtime } from './services/renewalService';
+import { subscribeToSchoolsRealtime } from './services/authService';
+import { getSystemUsers } from './services/superAdminService';
 
 import {
   Calendar,
@@ -71,6 +73,7 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   ChevronRight,
   School as SchoolIcon,
   Printer,
@@ -139,6 +142,7 @@ export default function App() {
   const [adminSubTab, setAdminSubTab] = useState<'OVERVIEW' | 'SCHOOLS' | 'REQUESTS' | 'LICENSE' | 'USERS' | 'SETTINGS'>('OVERVIEW');
   const [schools, setSchools] = useState<School[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [superAdminRequests, setSuperAdminRequests] = useState<RenewalRequest[]>([]);
 
   // 3. Tab điều hướng chính và Drawer cho Mobile
   const [activeTab, setActiveTab] = useState<
@@ -166,6 +170,37 @@ export default function App() {
       loadSchoolRenewalRequests();
     }
   }, [activeTab, currentSchool?.schoolId, loadSchoolRenewalRequests]);
+
+  // Lắng nghe realtime danh sách trường học, tài khoản và yêu cầu gia hạn khi đăng nhập Super Admin
+  useEffect(() => {
+    if (currentUser?.role !== 'super_admin') return;
+
+    // 1. Nạp ban đầu danh sách trường và danh sách users
+    getAllSchools('super_admin').then((initialSchools) => {
+      if (initialSchools.length > 0) {
+        setSchools(initialSchools);
+        getSystemUsers(initialSchools).then((uList) => setUsers(uList)).catch(() => {});
+      }
+    }).catch(() => {});
+
+    // Lắng nghe realtime danh sách trường từ Firestore
+    const unsubscribeSchools = subscribeToSchoolsRealtime((updatedList) => {
+      if (updatedList.length > 0) {
+        setSchools(updatedList);
+        getSystemUsers(updatedList).then((uList) => setUsers(uList)).catch(() => {});
+      }
+    });
+
+    // Lắng nghe realtime các yêu cầu gia hạn
+    const unsubscribeRequests = subscribeToRenewalRequestsRealtime((requests) => {
+      setSuperAdminRequests(requests);
+    });
+
+    return () => {
+      if (unsubscribeSchools) unsubscribeSchools();
+      if (unsubscribeRequests) unsubscribeRequests();
+    };
+  }, [currentUser?.role]);
 
   // Đồng bộ tab khi đổi vai trò người dùng
   useEffect(() => {
@@ -522,6 +557,18 @@ export default function App() {
     return (assignments || []).filter((a) => a.isMerged || (a.classIds && a.classIds.length > 1) || (a.teacherIds && a.teacherIds.length > 1)).length;
   }, [assignments]);
 
+  // Kiểm tra số ngày còn lại của bản quyền trường học (< 5 ngày kích hoạt cảnh báo)
+  const schoolDaysUntilExpiry = useMemo(() => {
+    if (!currentSchool?.expiredAt) return null;
+    const expDate = new Date(currentSchool.expiredAt);
+    if (expDate.getFullYear() >= 2090) return null; // Bản quyền vĩnh viễn
+    const diff = expDate.getTime() - new Date().getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }, [currentSchool?.expiredAt]);
+
+  const isSchoolExpiringSoon = schoolDaysUntilExpiry !== null && schoolDaysUntilExpiry < 5 && schoolDaysUntilExpiry >= 0;
+  const isSchoolExpired = schoolDaysUntilExpiry !== null && schoolDaysUntilExpiry < 0;
+
   // Các mục menu bên trái theo đúng thứ tự hiển thị:
   const navMenuItems = currentUser?.role === 'super_admin'
     ? [
@@ -536,21 +583,25 @@ export default function App() {
           id: 'SUPER_ADMIN_SCHOOLS' as any,
           label: 'Quản Lý Trường Học',
           icon: Building2,
-          badge: `${(schools || []).length} trường`,
+          badge: `${schools.length} trường`,
           badgeColor: 'bg-emerald-600 text-white',
         },
         {
           id: 'SUPER_ADMIN_REQUESTS' as any,
           label: 'Yêu Cầu Gia Hạn',
           icon: Sparkles,
-          badge: 'Xét Duyệt',
-          badgeColor: 'bg-purple-600 text-white',
+          badge: superAdminRequests.filter((r) => r.status === 'pending').length > 0
+            ? `${superAdminRequests.filter((r) => r.status === 'pending').length} chờ duyệt`
+            : `${superAdminRequests.length} yêu cầu`,
+          badgeColor: superAdminRequests.filter((r) => r.status === 'pending').length > 0
+            ? 'bg-amber-500 text-white animate-pulse'
+            : 'bg-purple-600 text-white',
         },
         {
           id: 'SUPER_ADMIN_USERS' as any,
           label: 'Quản Lý Tài Khoản',
           icon: Users,
-          badge: `${(users || []).length || '...'} users`,
+          badge: `${users.length} users`,
           badgeColor: 'bg-purple-600 text-white',
         },
         {
@@ -629,8 +680,16 @@ export default function App() {
           id: 'SCHOOL_ACCOUNT' as const,
           label: 'Quản Lý Tài Khoản Trường',
           icon: Building2,
-          badge: 'Bản Quyền',
-          badgeColor: 'bg-emerald-600 text-white',
+          badge: isSchoolExpired
+            ? 'Đã Hết Hạn'
+            : isSchoolExpiringSoon
+            ? `Còn ${schoolDaysUntilExpiry === 0 ? 'hôm nay' : `${schoolDaysUntilExpiry} ngày`}`
+            : 'Bản Quyền',
+          badgeColor: isSchoolExpired
+            ? 'bg-rose-600 text-white font-black'
+            : isSchoolExpiringSoon
+            ? 'bg-amber-500 text-slate-950 font-black animate-pulse'
+            : 'bg-emerald-600 text-white',
         },
         {
           id: 'GUIDE' as const,
@@ -871,6 +930,7 @@ export default function App() {
             const isActive =
               (item.id === 'SUPER_ADMIN_OVERVIEW' && activeTab === 'SUPER_ADMIN' && adminSubTab === 'OVERVIEW') ||
               (item.id === 'SUPER_ADMIN_SCHOOLS' && activeTab === 'SUPER_ADMIN' && adminSubTab === 'SCHOOLS') ||
+              (item.id === 'SUPER_ADMIN_REQUESTS' && activeTab === 'SUPER_ADMIN' && adminSubTab === 'REQUESTS') ||
               (item.id === 'SUPER_ADMIN_USERS' && activeTab === 'SUPER_ADMIN' && adminSubTab === 'USERS') ||
               (item.id === activeTab && !String(item.id).startsWith('SUPER_ADMIN_'));
 
@@ -1362,72 +1422,158 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-r from-indigo-950/90 via-slate-900 to-purple-950/90 p-6 sm:p-7 rounded-3xl border border-indigo-500/30 space-y-4 shadow-xl">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {currentSchool?.planStatus === 'renewed' || currentSchool?.renewalPackageName ? (
-                          <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wide flex items-center gap-1.5 shadow-sm">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                            <span>Trạng Thái: Đã gia hạn ({currentSchool.renewalPackageName || 'Gói chính thức'})</span>
-                          </span>
-                        ) : currentSchool?.plan === 'trial' ? (
-                          <span className="px-3 py-1 rounded-full text-xs font-black bg-blue-500/20 text-blue-300 border border-blue-500/40 uppercase tracking-wide flex items-center gap-1.5 shadow-sm">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Trạng Thái: Dùng thử 14 ngày</span>
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wide flex items-center gap-1.5 shadow-sm">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Trạng Thái: Bản quyền chính thức</span>
-                          </span>
-                        )}
+                {/* KHỐI TRẠNG THÁI BẢN QUYỀN VÀ HẠN SỬ DỤNG CÓ CẢNH BÁO */}
+                {(() => {
+                  const schoolExpDate = currentSchool?.expiredAt ? new Date(currentSchool.expiredAt) : null;
+                  const isPerm = schoolExpDate ? schoolExpDate.getFullYear() >= 2090 : false;
+                  const isExp = schoolExpDate && !isPerm ? schoolExpDate < new Date() : false;
+                  const daysLeft = schoolExpDate && !isPerm
+                    ? Math.ceil((schoolExpDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                    : null;
+                  const isExpSoon = !isPerm && daysLeft !== null && daysLeft < 5 && daysLeft >= 0;
 
-                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                          currentSchool?.status === 'active'
-                            ? 'bg-emerald-950/60 text-emerald-400 border-emerald-700/50'
-                            : 'bg-rose-950/60 text-rose-400 border-rose-700/50'
-                        }`}>
-                          {currentSchool?.status === 'active' ? 'Đang hoạt động' : 'Tạm khóa'}
-                        </span>
-                      </div>
-
-                      <div className="pt-1">
-                        <div className="text-xs text-slate-400 font-medium">Thời hạn bản quyền hệ thống:</div>
-                        <h4 className="text-base sm:text-lg font-black text-white flex items-center gap-2 mt-0.5">
-                          <Calendar className="w-5 h-5 text-indigo-400" />
-                          <span>
-                            Hạn sử dụng:{' '}
-                            {currentSchool?.expiredAt
-                              ? new Date(currentSchool.expiredAt).getFullYear() >= 2090
-                                ? 'Vĩnh viễn (Không giới hạn thời gian)'
-                                : new Date(currentSchool.expiredAt).toLocaleDateString('vi-VN', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                  })
-                              : 'Không giới hạn'}
-                          </span>
-                        </h4>
-                      </div>
-
-                      {currentSchool?.lastRenewedAt && (
-                        <div className="text-xs text-slate-400 flex items-center gap-1.5 pt-0.5">
-                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Thời điểm gia hạn gần nhất: <strong className="text-slate-200">{new Date(currentSchool.lastRenewedAt).toLocaleDateString('vi-VN')}</strong></span>
+                  return (
+                    <div className="bg-gradient-to-r from-indigo-950/90 via-slate-900 to-purple-950/90 p-6 sm:p-7 rounded-3xl border border-indigo-500/30 space-y-4 shadow-xl">
+                      {/* CẢNH BÁO SẮP HẾT HẠN (< 5 NGÀY) HIỂN THỊ NỔI BẬT */}
+                      {isExpSoon && (
+                        <div className="p-4 rounded-2xl bg-amber-500/15 border-2 border-amber-500/50 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-amber-500/10 animate-pulse">
+                          <div className="flex items-start sm:items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-amber-500/30 text-amber-300 border border-amber-500/60 flex items-center justify-center shrink-0">
+                              <AlertTriangle className="w-5 h-5 text-amber-300" />
+                            </div>
+                            <div>
+                              <div className="font-black text-amber-300 text-sm flex items-center gap-2">
+                                <span>⚠️ CẢNH BÁO: TÀI KHOẢN SẮP HẾT HẠN ({daysLeft === 0 ? 'HẾT HẠN HÔM NAY' : `CÒN ${daysLeft} NGÀY`})!</span>
+                              </div>
+                              <p className="text-[11px] text-amber-100/90 mt-0.5 leading-relaxed">
+                                Bản quyền của trường sẽ hết hạn vào ngày <strong>{schoolExpDate?.toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>. Quản trị viên vui lòng gửi yêu cầu gia hạn ngay để không bị gián đoạn hoạt động.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setIsRenewalModalOpen(true)}
+                            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all cursor-pointer shrink-0 shadow-md flex items-center justify-center gap-1.5 hover:scale-105 active:scale-95"
+                          >
+                            <Sparkles className="w-4 h-4 text-slate-950" />
+                            <span>Gia Hạn Ngay</span>
+                          </button>
                         </div>
                       )}
-                    </div>
 
-                    <button
-                      onClick={() => setIsRenewalModalOpen(true)}
-                      className="px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2 shrink-0 hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                      <Sparkles className="w-4 h-4 text-amber-300" />
-                      <span>Tạo Yêu Cầu Gia Hạn</span>
-                    </button>
-                  </div>
-                </div>
+                      {/* CẢNH BÁO ĐÃ HẾT HẠN */}
+                      {isExp && (
+                        <div className="p-4 rounded-2xl bg-rose-500/15 border-2 border-rose-500/50 text-rose-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-rose-500/10">
+                          <div className="flex items-start sm:items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-rose-500/30 text-rose-300 border border-rose-500/60 flex items-center justify-center shrink-0">
+                              <AlertCircle className="w-5 h-5 text-rose-300" />
+                            </div>
+                            <div>
+                              <div className="font-black text-rose-300 text-sm">
+                                ⛔ CẢNH BÁO: TÀI KHOẢN ĐÃ HẾT HẠN SỬ DỤNG!
+                              </div>
+                              <p className="text-[11px] text-rose-100/90 mt-0.5 leading-relaxed">
+                                Bản quyền hệ thống của trường đã hết hạn vào ngày <strong>{schoolExpDate?.toLocaleDateString('vi-VN')}</strong>. Vui lòng tạo yêu cầu gia hạn để tiếp tục sử dụng.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setIsRenewalModalOpen(true)}
+                            className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs transition-all cursor-pointer shrink-0 shadow-md flex items-center justify-center gap-1.5 hover:scale-105 active:scale-95"
+                          >
+                            <Sparkles className="w-4 h-4 text-amber-300" />
+                            <span>Gia Hạn Ngay</span>
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* BADGE TRẠNG THÁI */}
+                            {isExp ? (
+                              <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-500/20 text-rose-300 border border-rose-500/40 uppercase tracking-wide flex items-center gap-1.5 shadow-sm">
+                                <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                                <span>Trạng Thái: Đã hết hạn</span>
+                              </span>
+                            ) : isExpSoon ? (
+                              <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/50 uppercase tracking-wide flex items-center gap-1.5 shadow-sm animate-pulse">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Trạng Thái: Sắp hết hạn (Còn {daysLeft === 0 ? 'hôm nay' : `${daysLeft} ngày`})</span>
+                              </span>
+                            ) : currentSchool?.planStatus === 'renewed' || currentSchool?.renewalPackageName ? (
+                              <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wide flex items-center gap-1.5 shadow-sm">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>Trạng Thái: Đã gia hạn ({currentSchool.renewalPackageName || 'Gói chính thức'})</span>
+                              </span>
+                            ) : currentSchool?.plan === 'trial' ? (
+                              <span className="px-3 py-1 rounded-full text-xs font-black bg-blue-500/20 text-blue-300 border border-blue-500/40 uppercase tracking-wide flex items-center gap-1.5 shadow-sm">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>Trạng Thái: Dùng thử 14 ngày</span>
+                              </span>
+                            ) : (
+                              <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wide flex items-center gap-1.5 shadow-sm">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Trạng Thái: Bản quyền chính thức</span>
+                              </span>
+                            )}
+
+                            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                              currentSchool?.status === 'active' && !isExp
+                                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-700/50'
+                                : 'bg-rose-950/60 text-rose-400 border-rose-700/50'
+                            }`}>
+                              {currentSchool?.status === 'active' && !isExp ? 'Đang hoạt động' : isExp ? 'Hết hạn bản quyền' : 'Tạm khóa'}
+                            </span>
+                          </div>
+
+                          <div className="pt-1">
+                            <div className="text-xs text-slate-400 font-medium">Thời hạn bản quyền hệ thống:</div>
+                            <h4 className="text-base sm:text-lg font-black text-white flex items-center gap-2 mt-0.5 flex-wrap">
+                              <Calendar className="w-5 h-5 text-indigo-400" />
+                              <span>
+                                Hạn sử dụng:{' '}
+                                {currentSchool?.expiredAt
+                                  ? isPerm
+                                    ? 'Vĩnh viễn (Không giới hạn thời gian)'
+                                    : schoolExpDate?.toLocaleDateString('vi-VN', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                      })
+                                  : 'Không giới hạn'}
+                              </span>
+                              {isExpSoon && (
+                                <span className="px-2.5 py-0.5 rounded-md text-xs font-black bg-amber-500 text-slate-950 animate-pulse shadow-sm">
+                                  ⚠️ Sắp hết hạn (Còn {daysLeft === 0 ? 'hôm nay' : `${daysLeft} ngày`})
+                                </span>
+                              )}
+                              {isExp && (
+                                <span className="px-2.5 py-0.5 rounded-md text-xs font-black bg-rose-600 text-white shadow-sm">
+                                  Đã hết hạn
+                                </span>
+                              )}
+                            </h4>
+                          </div>
+
+                          {currentSchool?.lastRenewedAt && (
+                            <div className="text-xs text-slate-400 flex items-center gap-1.5 pt-0.5">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Thời điểm gia hạn gần nhất: <strong className="text-slate-200">{new Date(currentSchool.lastRenewedAt).toLocaleDateString('vi-VN')}</strong></span>
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => setIsRenewalModalOpen(true)}
+                          className="px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2 shrink-0 hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          <Sparkles className="w-4 h-4 text-amber-300" />
+                          <span>Tạo Yêu Cầu Gia Hạn</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* BẢNG LỊCH SỬ CÁC YÊU CẦU GIA HẠN GẦN ĐÂY */}
                 <div className="space-y-3 pt-2">
