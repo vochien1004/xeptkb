@@ -785,6 +785,7 @@ export async function loginWithFirebaseAuth(credentials: {
     ''
   ).trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
   const lowerInput = rawInput.toLowerCase();
+  const digitsOnly = rawInput.replace(/[\s.-]/g, '');
   const password = (credentials.password || '').trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
 
   if (!rawInput) {
@@ -832,61 +833,71 @@ export async function loginWithFirebaseAuth(credentials: {
     }
   }
 
-  // 2. Tra cứu tài khoản theo Tên đăng nhập, Số điện thoại, Email hoặc Mã trường trong Firestore
-  let lookup: { user?: UserProfile; school?: School; matchedBy?: any } | null = null;
-  try {
-    lookup = await findUserByIdentifier(rawInput);
-  } catch (networkErr: any) {
-    console.error('Lỗi kết nối khi tra cứu tài khoản:', networkErr);
-    return {
-      success: false,
-      error: '⚠️ Lỗi kết nối máy chủ xác thực: Không thể kết nối tới cơ sở dữ liệu Firebase. Vui lòng kiểm tra lại đường truyền mạng hoặc cấu hình Proxy/Cloudflare!',
-    };
+  // 2. TẠO DANH SÁCH EMAIL ỨNG VIÊN ĐỂ THỬ ĐĂNG NHẬP TRỰC TIẾP QUA FIREBASE AUTH
+  const emailCandidates: string[] = [];
+  if (lowerInput.includes('@')) {
+    emailCandidates.push(lowerInput);
+  } else {
+    emailCandidates.push(`${lowerInput}@gmail.com`);
+    emailCandidates.push(`${lowerInput}@school.tkbpro.edu.vn`);
+    emailCandidates.push(`${lowerInput}@tkbpro.edu.vn`);
+    emailCandidates.push(`${lowerInput}@edu.vn`);
   }
 
-  if (!lookup || !lookup.user) {
-    return {
-      success: false,
-      error: `Không tìm thấy tài khoản tương ứng với "${rawInput}".\n• Vui lòng kiểm tra lại Tên đăng nhập, Mã trường (School ID) hoặc Số điện thoại đã đăng ký.\n• Nếu trường của bạn chưa có tài khoản, vui lòng bấm tab "Đăng Ký Trường Mới"!`,
-    };
+  // Bổ sung email từ cache cục bộ (nếu có)
+  const localSchools = getLocalSchoolCache();
+  for (const s of localSchools) {
+    if (isAccountCandidateMatch(s, rawInput, lowerInput, digitsOnly)) {
+      if (s.adminEmail) emailCandidates.push(s.adminEmail.toLowerCase());
+    }
   }
-
-  const targetUser = lookup.user;
-  const targetSchool = lookup.school;
-  let authSuccess = false;
-
-  // 3. Xác thực Mật khẩu:
-  // Cách A: Thử đăng nhập qua Firebase Auth với danh sách email ứng viên
-  const candidateEmails = Array.from(
-    new Set(
-      [
-        targetUser.email,
-        targetSchool?.adminEmail,
-        lowerInput.includes('@') ? lowerInput : null,
-        `${lowerInput.split('@')[0]}@gmail.com`,
-        `${lowerInput.split('@')[0]}@school.tkbpro.edu.vn`,
-        `${lowerInput.split('@')[0]}@tkbpro.edu.vn`,
-        targetUser.username ? `${targetUser.username}@school.tkbpro.edu.vn` : null,
-        targetSchool?.schoolId ? `${targetSchool.schoolId}@school.tkbpro.edu.vn` : null,
-      ].filter(Boolean) as string[]
-    )
-  );
-
-  for (const emailToTry of candidateEmails) {
-    if (authSuccess) break;
-    try {
-      const userCred = await signInWithEmailAndPassword(auth, emailToTry, password);
-      if (userCred.user) {
-        authSuccess = true;
-        break;
-      }
-    } catch {
-      // Tiếp tục thử email tiếp theo
+  const localUsers = getLocalUserRegistry();
+  for (const u of localUsers) {
+    if (isAccountCandidateMatch(u, rawInput, lowerInput, digitsOnly)) {
+      if (u.email) emailCandidates.push(u.email.toLowerCase());
     }
   }
 
-  // Cách B: Kiểm tra với mật khẩu đã lưu trong Firestore (targetUser.passwordHash, adminPasswordInitial, adminPassword, v.v.)
-  if (!authSuccess) {
+  const uniqueCandidates = Array.from(new Set(emailCandidates.map((e) => e.trim().toLowerCase())));
+
+  // BƯỚC 2A: Thử xác thực trực tiếp qua Firebase Auth với danh sách email ứng viên (Không cần quyền đọc Firestore trước)
+  let directAuthUser: FirebaseUser | null = null;
+  for (const em of uniqueCandidates) {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, em, password);
+      if (cred.user) {
+        directAuthUser = cred.user;
+        break;
+      }
+    } catch {
+      // Tiếp tục thử email khác
+    }
+  }
+
+  // Nếu xác thực Firebase Auth thành công, lúc này request.auth != null nên đọc Firestore có đầy đủ quyền!
+  if (directAuthUser) {
+    try {
+      const syncedProfile = await ensureAndSyncUserDocument(directAuthUser);
+      syncedProfile.username = syncedProfile.username || rawInput;
+      return await resolveUserAccess(syncedProfile);
+    } catch (syncErr: any) {
+      console.warn('Lưu ý đồng bộ sau đăng nhập Auth:', syncErr);
+    }
+  }
+
+  // BƯỚC 2B: Nếu xác thực Firebase Auth trực tiếp chưa thành công, tra cứu tài khoản trong Cache hoặc Firestore
+  let lookup: { user?: UserProfile; school?: School; matchedBy?: any } | null = null;
+  try {
+    lookup = await findUserByIdentifier(rawInput);
+  } catch {
+    // Bỏ qua lỗi kết nối
+  }
+
+  if (lookup && lookup.user) {
+    const targetUser = lookup.user;
+    const targetSchool = lookup.school;
+
+    // Kiểm tra mật khẩu đối chiếu từ cơ sở dữ liệu Firestore
     const validHashes = [
       targetUser.passwordHash,
       (targetUser as any).password,
@@ -897,36 +908,41 @@ export async function loginWithFirebaseAuth(credentials: {
     ].filter(Boolean);
 
     if (validHashes.some((h) => h === password)) {
-      authSuccess = true;
-      // Tự động đồng bộ tạo tài khoản Firebase Auth nếu chưa có để các lần sau đăng nhập nhanh
-      const emailToCreate = targetUser.email || (lowerInput.includes('@') ? lowerInput : `${lowerInput.split('@')[0]}@school.tkbpro.edu.vn`);
-      if (emailToCreate) {
-        try {
-          await createUserWithEmailAndPassword(auth, emailToCreate, password);
-        } catch {
-          // ignore
+      // Mật khẩu khớp! Tự động khởi tạo tài khoản Firebase Auth ngầm
+      const emailToCreate =
+        targetUser.email ||
+        (lowerInput.includes('@') ? lowerInput : `${lowerInput.split('@')[0]}@school.tkbpro.edu.vn`);
+      try {
+        if (emailToCreate) {
+          const newCred = await createUserWithEmailAndPassword(auth, emailToCreate, password);
+          targetUser.uid = newCred.user.uid;
         }
+      } catch {
+        // Đã tồn tại hoặc bỏ qua
       }
+
+      const syncedProfile = await ensureAndSyncUserDocument(
+        { uid: targetUser.uid, email: targetUser.email, displayName: targetUser.displayName },
+        targetUser.schoolId
+      );
+      syncedProfile.username = targetUser.username || rawInput;
+      syncedProfile.phone = targetUser.phone || syncedProfile.phone;
+
+      return await resolveUserAccess(syncedProfile, targetSchool);
+    } else {
+      const accountLabel = targetUser.username || targetSchool?.schoolName || targetUser.displayName || rawInput;
+      return {
+        success: false,
+        error: `Mật khẩu không chính xác cho tài khoản "${accountLabel}".\n• Vui lòng kiểm tra lại phím Caps Lock hoặc bộ gõ tiếng Việt (Unikey/EVKey).\n• Bạn có thể sử dụng chức năng "Quên mật khẩu" bên dưới để đặt lại mật khẩu mới qua Số điện thoại!`,
+      };
     }
   }
 
-  if (!authSuccess) {
-    const accountLabel = targetUser.username || targetSchool?.schoolName || targetUser.displayName || rawInput;
-    return {
-      success: false,
-      error: `Mật khẩu không chính xác cho tài khoản "${accountLabel}".\n• Vui lòng kiểm tra lại phím Caps Lock hoặc bộ gõ tiếng Việt (Unikey/EVKey).\n• Bạn có thể sử dụng chức năng "Quên mật khẩu" bên dưới để đặt lại mật khẩu mới qua Số điện thoại!`,
-    };
-  }
-
-  // 4. Đồng bộ profile và phân quyền truy cập
-  const syncedProfile = await ensureAndSyncUserDocument(
-    { uid: targetUser.uid, email: targetUser.email, displayName: targetUser.displayName },
-    targetUser.schoolId
-  );
-  syncedProfile.username = targetUser.username || syncedProfile.username;
-  syncedProfile.phone = targetUser.phone || syncedProfile.phone;
-
-  return await resolveUserAccess(syncedProfile, targetSchool);
+  // BƯỚC 2C: Không tìm thấy tài khoản
+  return {
+    success: false,
+    error: `Không tìm thấy tài khoản tương ứng với "${rawInput}".\n• Vui lòng kiểm tra lại Tên đăng nhập, Mã trường (School ID) hoặc Số điện thoại đã đăng ký.\n• Nếu trường của bạn chưa có tài khoản, vui lòng bấm tab "Đăng Ký Trường Mới"!`,
+  };
 }
 
 /**

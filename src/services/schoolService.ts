@@ -329,8 +329,10 @@ export async function getAllSchools(currentUserRole?: string, userSchoolId?: str
       }
       schoolMap.clear();
     }
-  } catch (error) {
-    console.warn('Không thể tải danh sách trường từ Firebase Firestore:', error);
+  } catch (error: any) {
+    if (error?.code !== 'permission-denied' && !error?.message?.includes('permissions')) {
+      console.warn('Không thể tải danh sách trường từ Firebase Firestore:', error);
+    }
   }
 
   const combinedList = Array.from(schoolMap.values());
