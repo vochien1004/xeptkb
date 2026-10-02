@@ -2468,9 +2468,9 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                 </div>
 
                 {/* ================================================================= */}
-                {/* 3. BẢNG CÁC THẺ MÔN HỌC BÊN DƯỚI TKB LỚP (GIỐNG HÌNH CHỤP)        */}
+                {/* 3. BẢNG CÁC THẺ MÔN HỌC BÊN DƯỚI TKB LỚP (BẢN COMPACT ~60%)        */}
                 {/* ================================================================= */}
-                <div className="p-4 bg-slate-50/70 border-t border-slate-200 space-y-3">
+                <div className="p-2 sm:p-2.5 bg-slate-50/70 border-t border-slate-200 space-y-2">
                   {(() => {
                     const incompleteSubjectsCount = regularClassAssignments.filter((a) => {
                       const cnt = getScheduledCountForSubjectInClass(cls.id, a.subjectId);
@@ -2483,25 +2483,25 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                     }).length + (shlScheduledCount === shlAssignedPeriods ? 1 : 0);
 
                     return (
-                      <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
-                        <span className="font-black text-slate-800 uppercase flex items-center gap-1.5">
-                          <BookOpen className="w-4 h-4 text-indigo-600" />
+                      <div className="flex items-center justify-between flex-wrap gap-1.5 text-[11px]">
+                        <span className="font-black text-slate-800 uppercase flex items-center gap-1">
+                          <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
                           <span>Bảng Môn Học & Phân Công Của {cls.name.toLowerCase().startsWith('lớp') ? cls.name : `Lớp ${cls.name}`}</span>
                         </span>
-                        <div className="flex items-center gap-2 font-extrabold text-slate-600 flex-wrap">
+                        <div className="flex items-center gap-1.5 font-extrabold text-slate-600 flex-wrap text-[10px]">
                           <span>
                             Đã xếp: <strong className="text-indigo-900">{totalScheduledPeriods}</strong> /{' '}
                             {totalAssignedPeriods} tiết
                           </span>
                           <span className="text-slate-300">•</span>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px] border border-emerald-300 flex items-center gap-1">
+                          <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] border border-emerald-300 flex items-center gap-0.5">
                             <span>✓</span>
-                            <span>{completedSubjectsCount} môn đã đủ</span>
+                            <span>{completedSubjectsCount} môn đủ</span>
                           </span>
                           {incompleteSubjectsCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 font-black text-[11px] border border-amber-400 flex items-center gap-1 shadow-2xs">
+                            <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-950 font-black text-[10px] border border-amber-400 flex items-center gap-0.5 shadow-2xs">
                               <span className="text-amber-700">⏳</span>
-                              <span>{incompleteSubjectsCount} môn chưa đủ tiết</span>
+                              <span>{incompleteSubjectsCount} môn thiếu</span>
                             </span>
                           )}
                         </div>
@@ -2509,8 +2509,8 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                     );
                   })()}
 
-                    {/* Lưới các thẻ môn học */}
-                    <div className="flex flex-wrap gap-2.5 items-stretch">
+                    {/* Lưới các thẻ môn học siêu gọn (Compact ~60%) */}
+                    <div className="flex flex-wrap gap-1.5 items-stretch">
                       {regularClassAssignments.map((asg) => {
                         const sub = subjectsMap.get(asg.subjectId);
 
@@ -2616,9 +2616,9 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                 setIsOffMode(false);
                               }
                             }}
-                            className={`p-2.5 rounded-xl border-2 cursor-pointer select-none transition-all flex flex-col justify-between min-w-28 sm:min-w-36 shadow-2xs ${
+                            className={`p-1.5 rounded-lg border-2 cursor-pointer select-none transition-all flex flex-col justify-between min-w-[95px] sm:min-w-[108px] max-w-[130px] shadow-2xs text-[10px] ${
                               isSelected
-                                ? 'bg-rose-50 border-rose-500 shadow-md ring-2 ring-rose-400 scale-[1.02]'
+                                ? 'bg-rose-50 border-rose-500 shadow-md ring-1 ring-rose-400 scale-[1.02]'
                                 : isDuplicateAssignment
                                 ? 'bg-rose-50/70 border-rose-400 hover:border-rose-600 hover:bg-rose-100/60'
                                 : isOver
@@ -2629,12 +2629,12 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                             }`}
                           >
                             {/* Dòng 1: Icon / Tên Môn / Số tiết / Ca */}
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-black text-xs text-slate-900 flex items-center gap-1">
-                                <span className={`text-[11px] ${isUnder ? 'text-amber-800' : isComplete ? 'text-emerald-700' : 'text-slate-600'}`}>
+                            <div className="flex items-center justify-between gap-1 leading-none">
+                              <span className="font-black text-[11px] text-slate-900 flex items-center gap-0.5 truncate">
+                                <span className={`text-[9px] ${isUnder ? 'text-amber-800' : isComplete ? 'text-emerald-700' : 'text-slate-600'}`}>
                                   {isUnder ? '⏳' : isComplete ? '✓' : '👓'}
                                 </span>
-                                <span className={isUnder ? 'text-amber-950 font-black' : isComplete ? 'text-slate-900 font-black' : 'text-slate-900'}>
+                                <span className={`truncate max-w-[55px] ${isUnder ? 'text-amber-950 font-black' : isComplete ? 'text-slate-900 font-black' : 'text-slate-900'}`}>
                                   {sub?.shortName || sub?.name || asg.subjectId}
                                 </span>
                                 <span className={`font-extrabold ${isUnder ? 'text-amber-900' : isComplete ? 'text-emerald-700' : 'text-rose-700'}`}>
@@ -2642,7 +2642,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                 </span>
                               </span>
                               <span
-                                className={`text-[10px] font-bold px-1 rounded border ${
+                                className={`text-[8px] font-bold px-0.5 py-0 rounded border ${
                                   isUnder
                                     ? 'text-amber-900 bg-amber-200/90 border-amber-300'
                                     : isComplete
@@ -2656,23 +2656,23 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
 
                             {/* Dòng 2: Nút Thùng rác + Số tiết đã xếp */}
                             <div
-                              className={`flex items-center justify-between gap-1 my-1.5 pt-1 border-t ${
+                              className={`flex items-center justify-between gap-0.5 my-1 pt-0.5 border-t leading-none ${
                                 isUnder ? 'border-amber-300/80' : isComplete ? 'border-emerald-200' : 'border-slate-200'
                               }`}
                             >
                               <button
                                 type="button"
                                 onClick={(e) => handleClearSubjectInClass(cls.id, asg.subjectId, e)}
-                                className={`p-0.5 rounded transition-colors cursor-pointer ${
+                                className={`p-0.5 rounded transition-colors cursor-pointer shrink-0 ${
                                   isUnder
                                     ? 'text-amber-800 hover:text-rose-700 hover:bg-amber-200'
                                     : 'text-rose-600 hover:text-rose-800 hover:bg-rose-100'
                                 }`}
                                 title="Xóa tất cả các tiết đã xếp của môn này trong lớp"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-2.5 h-2.5" />
                               </button>
-                              <span className="text-[11px] font-bold text-slate-700">
+                              <span className="text-[9px] font-bold text-slate-700 truncate">
                                 Đã xếp{' '}
                                 <strong
                                   className={
@@ -2687,23 +2687,23 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                 </strong>
                                 /{asg.periodsPerWeek}
                                 {isComplete && (
-                                  <span className="ml-1 text-[10px] text-emerald-700 font-black">✓ Đủ</span>
+                                  <span className="ml-0.5 text-[8px] text-emerald-700 font-black">✓ Đủ</span>
                                 )}
                                 {isUnder && (
-                                  <span className="ml-1 text-[10px] text-amber-950 bg-amber-200/90 px-1 py-0.5 rounded font-black border border-amber-400 shrink-0">
+                                  <span className="ml-0.5 text-[8px] text-amber-950 bg-amber-200/90 px-0.5 py-0 rounded font-black border border-amber-400 shrink-0">
                                     Thiếu {missingPeriods}
                                   </span>
                                 )}
                                 {isOver && (
-                                  <span className="ml-1 text-[10px] text-rose-700 font-black">⚠ Thừa</span>
+                                  <span className="ml-0.5 text-[8px] text-rose-700 font-black">⚠ Thừa</span>
                                 )}
                               </span>
                             </div>
 
                             {/* Dòng 3: Tên giáo viên & Cảnh báo nếu trùng PCGD */}
-                            <div className="space-y-1">
+                            <div className="space-y-0.5">
                               <div
-                                className={`text-[11px] font-bold truncate text-center py-0.5 px-1.5 rounded border flex items-center justify-center gap-1 shadow-2xs ${
+                                className={`text-[9px] font-bold truncate text-center py-0.5 px-1 rounded border flex items-center justify-center gap-0.5 shadow-2xs leading-tight ${
                                   isDuplicateAssignment
                                     ? 'bg-rose-100 text-rose-950 border-rose-300 font-black'
                                     : isUnder
@@ -2716,18 +2716,18 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                               >
                                 {isOfficialMerged && teacherNamesList.length > 1 && (
                                   <span
-                                    className="text-[9px] bg-indigo-100 text-indigo-800 px-1 rounded font-black shrink-0"
+                                    className="text-[7px] bg-indigo-100 text-indigo-800 px-0.5 rounded font-black shrink-0"
                                     title="Môn ghép / Nhóm GV đồng giảng dạy"
                                   >
-                                    👥 {teacherNamesList.length} GV
+                                    👥{teacherNamesList.length}
                                   </span>
                                 )}
                                 <span className="truncate">{teachersLabel}</span>
                               </div>
 
                               {isDuplicateAssignment && (
-                                <div className="text-[9px] font-black text-rose-800 bg-rose-100/90 px-1 py-0.5 rounded border border-rose-300 text-center truncate">
-                                  ⚠️ Trùng PCGD ({sameSubjectClassAssignments.length} GV)
+                                <div className="text-[8px] font-black text-rose-800 bg-rose-100/90 px-0.5 py-0 rounded border border-rose-300 text-center truncate">
+                                  ⚠️ Trùng ({sameSubjectClassAssignments.length} GV)
                                 </div>
                               )}
                             </div>
@@ -2757,9 +2757,9 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                               setIsOffMode(false);
                             }
                           }}
-                          className={`p-2.5 rounded-xl border-2 cursor-pointer select-none transition-all flex flex-col justify-between min-w-28 sm:min-w-36 shadow-2xs ${
+                          className={`p-1.5 rounded-lg border-2 cursor-pointer select-none transition-all flex flex-col justify-between min-w-[95px] sm:min-w-[108px] max-w-[130px] shadow-2xs text-[10px] ${
                             isShlSelected
-                              ? 'bg-rose-50 border-rose-500 shadow-md ring-2 ring-rose-400 scale-[1.02]'
+                              ? 'bg-rose-50 border-rose-500 shadow-md ring-1 ring-rose-400 scale-[1.02]'
                               : isShlOver
                               ? 'bg-rose-100/90 border-rose-400 text-rose-950 ring-1 ring-rose-300'
                               : isShlUnder
@@ -2769,10 +2769,10 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                           title={`Tiết Sinh hoạt lớp ${cls.name} (GVCN: ${homeroomTeacher ? homeroomTeacher.name : 'Chưa gán GVCN'}) - Click để xếp linh hoạt vào bất kỳ tiết nào`}
                         >
                           {/* Dòng 1: Icon / Tên Môn / Số tiết / Ca */}
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-black text-xs text-slate-900 flex items-center gap-1">
-                              <span className="text-[11px] text-amber-600">👑</span>
-                              <span className={isShlUnder ? 'text-amber-950 font-black' : isShlComplete ? 'text-slate-900 font-black' : 'text-slate-900'}>
+                          <div className="flex items-center justify-between gap-1 leading-none">
+                            <span className="font-black text-[11px] text-slate-900 flex items-center gap-0.5 truncate">
+                              <span className="text-[9px] text-amber-600">👑</span>
+                              <span className={`truncate ${isShlUnder ? 'text-amber-950 font-black' : isShlComplete ? 'text-slate-900 font-black' : 'text-slate-900'}`}>
                                 Sinh hoạt
                               </span>
                               <span className={`font-extrabold ${isShlUnder ? 'text-amber-900' : isShlComplete ? 'text-emerald-700' : 'text-rose-700'}`}>
@@ -2780,7 +2780,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                               </span>
                             </span>
                             <span
-                              className={`text-[10px] font-bold px-1 rounded border ${
+                              className={`text-[8px] font-bold px-0.5 py-0 rounded border ${
                                 isShlUnder
                                   ? 'text-amber-900 bg-amber-200/90 border-amber-300'
                                   : isShlComplete
@@ -2794,23 +2794,23 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
 
                           {/* Dòng 2: Nút Thùng rác + Số tiết đã xếp */}
                           <div
-                            className={`flex items-center justify-between gap-1 my-1.5 pt-1 border-t ${
+                            className={`flex items-center justify-between gap-0.5 my-1 pt-0.5 border-t leading-none ${
                               isShlUnder ? 'border-amber-300/80' : isShlComplete ? 'border-emerald-200' : 'border-indigo-200'
                             }`}
                           >
                             <button
                               type="button"
                               onClick={(e) => handleClearSubjectInClass(cls.id, shlSubject.id, e)}
-                              className={`p-0.5 rounded transition-colors cursor-pointer ${
+                              className={`p-0.5 rounded transition-colors cursor-pointer shrink-0 ${
                                 isShlUnder
                                   ? 'text-amber-800 hover:text-rose-700 hover:bg-amber-200'
                                   : 'text-rose-600 hover:text-rose-800 hover:bg-rose-100'
                               }`}
                               title="Xóa tiết Sinh hoạt đã xếp của lớp này"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-2.5 h-2.5" />
                             </button>
-                            <span className="text-[11px] font-bold text-slate-700">
+                            <span className="text-[9px] font-bold text-slate-700 truncate">
                               Đã xếp{' '}
                               <strong
                                 className={
@@ -2825,11 +2825,11 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                               </strong>
                               /{shlAssignedPeriods}
                               {isShlComplete && (
-                                <span className="ml-1 text-[10px] text-emerald-700 font-black">✓ Đủ</span>
+                                <span className="ml-0.5 text-[8px] text-emerald-700 font-black">✓ Đủ</span>
                               )}
                               {isShlUnder && (
-                                <span className="inline-flex items-center gap-1">
-                                  <span className="text-[10px] text-amber-950 bg-amber-200/90 px-1 py-0.5 rounded font-black border border-amber-400 shrink-0">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <span className="text-[8px] text-amber-950 bg-amber-200/90 px-0.5 py-0 rounded font-black border border-amber-400 shrink-0">
                                     Thiếu {shlAssignedPeriods - shlScheduledCount}
                                   </span>
                                   <button
@@ -2838,22 +2838,22 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                       e.stopPropagation();
                                       handleAutoAssignAllClassesSHL(cls.id);
                                     }}
-                                    className="text-[9px] font-black bg-amber-400 hover:bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded shadow-2xs cursor-pointer inline-flex items-center gap-0.5 border border-amber-500 shrink-0"
+                                    className="text-[8px] font-black bg-amber-400 hover:bg-amber-500 text-slate-950 px-1 py-0 rounded shadow-2xs cursor-pointer inline-flex items-center gap-0.5 border border-amber-500 shrink-0"
                                     title="Phân nhanh tiết Sinh hoạt lớp vào Thứ 7 và lưu Firebase"
                                   >
-                                    ⚡ Phân T7
+                                    ⚡T7
                                   </button>
                                 </span>
                               )}
                               {isShlOver && (
-                                <span className="ml-1 text-[10px] text-rose-700 font-black">⚠ Thừa</span>
+                                <span className="ml-0.5 text-[8px] text-rose-700 font-black">⚠ Thừa</span>
                               )}
                             </span>
                           </div>
 
                           {/* Dòng 3: Tên Giáo viên Chủ nhiệm */}
                           <div
-                            className={`text-[11px] font-black truncate text-center py-0.5 px-1 rounded border shadow-2xs flex items-center justify-center gap-1 ${
+                            className={`text-[9px] font-black truncate text-center py-0.5 px-1 rounded border shadow-2xs flex items-center justify-center gap-0.5 leading-tight ${
                               isShlUnder
                                 ? 'bg-white/95 text-amber-950 border-amber-300'
                                 : isShlComplete
@@ -2861,7 +2861,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                 : 'bg-white/95 text-indigo-950 border-indigo-200'
                             }`}
                           >
-                            <span className="text-[10px] text-amber-600">👑</span>
+                            <span className="text-[9px] text-amber-600">👑</span>
                             <span className="truncate">
                               {homeroomTeacher?.shortName || homeroomTeacher?.name || 'Chưa gán GVCN'}
                             </span>
@@ -2877,15 +2877,15 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                         setIsOffMode(!isOffMode);
                         setSelectedSubjectCard(null);
                       }}
-                      className={`px-4 py-2.5 rounded-xl font-black text-xs cursor-pointer transition-all shadow-2xs flex flex-col items-center justify-center min-w-18 ${
+                      className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] cursor-pointer transition-all shadow-2xs flex flex-col items-center justify-center min-w-[65px] ${
                         isOffMode
                           ? 'bg-rose-700 text-white ring-2 ring-rose-400'
                           : 'bg-rose-500 hover:bg-rose-600 text-white'
                       }`}
                     >
-                      <span className="text-sm font-black">Nghỉ</span>
-                      <span className="text-[9px] opacity-80 font-normal">
-                        {isOffMode ? 'Đang chọn' : 'Click để gán'}
+                      <span className="text-xs font-black">Nghỉ</span>
+                      <span className="text-[8px] opacity-85 font-normal">
+                        {isOffMode ? 'Đang chọn' : 'Gán nghỉ'}
                       </span>
                     </button>
                   </div>
