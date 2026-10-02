@@ -275,17 +275,9 @@ export const DataManagementView: React.FC<Props> = ({
     setExpandedTeacherIds(new Set());
   };
 
-  // Khởi tạo hoặc lấy Form State của 1 GV
+  // Khởi tạo hoặc lấy Form State của 1 GV (Mặc định chưa tích chọn môn nào để tránh thừa)
   const getTeacherForm = (teacher: Teacher) => {
     if (teacherForms[teacher.id]) return teacherForms[teacher.id];
-
-    // Mặc định chọn môn đầu tiên trong chuyên môn của GV (nếu có)
-    const initialSubject =
-      teacher.subjects && teacher.subjects.length > 0 && subjectsMap.has(teacher.subjects[0])
-        ? [teacher.subjects[0]]
-        : subjects[0]
-        ? [subjects[0].id]
-        : [];
 
     const initialPeriods: Record<string, number> = {};
     subjects.forEach((s) => {
@@ -293,7 +285,7 @@ export const DataManagementView: React.FC<Props> = ({
     });
 
     return {
-      selectedSubjectIds: initialSubject,
+      selectedSubjectIds: [],
       subjectPeriods: initialPeriods,
       selectedClassIds: [],
       doublePeriodsAllowed: true,
@@ -627,8 +619,8 @@ export const DataManagementView: React.FC<Props> = ({
         }
       }
 
-      // Reset lại lựa chọn lớp
-      updateTeacherForm(teacher.id, { selectedClassIds: [] });
+      // Reset lại lựa chọn môn và lớp
+      updateTeacherForm(teacher.id, { selectedClassIds: [], selectedSubjectIds: [] });
 
       showToast(
         `Đã lưu phân công cho ${teacher.name} lên Firebase (${addedCount} mới, ${updatedCount} cập nhật)!`
