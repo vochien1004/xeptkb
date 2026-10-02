@@ -40,6 +40,7 @@ import {
   requestPasswordReset,
   resetPasswordWithPhoneVerification,
 } from '../services/authService';
+import { clearSchoolLocalCache } from '../services/firebaseClient';
 
 interface Props {
   onLoginSuccess?: (role: 'super_admin' | 'school_admin') => void;
@@ -122,6 +123,11 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Dọn sạch toàn bộ cache dữ liệu trường học cũ khi ở màn hình đăng nhập
+  useEffect(() => {
+    clearSchoolLocalCache();
+  }, []);
 
   // Kiểm tra tên đăng nhập khi người dùng nhập (Debounce)
   useEffect(() => {

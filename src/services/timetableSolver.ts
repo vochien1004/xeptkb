@@ -20,6 +20,19 @@ import {
 import { MergedClassHandler } from './mergedClassHandler';
 import { ValidationEngine } from './validationEngine';
 
+export interface UnplacedReminder {
+  assignmentId: string;
+  classId: string;
+  className: string;
+  subjectId: string;
+  subjectName: string;
+  teacherId: string;
+  teacherName: string;
+  missingPeriods: number;
+  reasons: string[];
+  recommendations: string[];
+}
+
 export interface SolverResult {
   success: boolean;
   slots: TimetableSlot[];
@@ -27,6 +40,7 @@ export interface SolverResult {
   backtrackCount: number;
   executionTimeMs: number;
   message: string;
+  unplacedReminders?: UnplacedReminder[];
 }
 
 interface SchedulingTask {
@@ -73,23 +87,19 @@ export class TimetableSolver {
 
   /**
    * Khởi chạy xếp TKB TỰ ĐỘNG CHO TOÀN TRƯỜNG
+   * BẢO TOÀN 100% CÁC TIẾT ĐÃ XẾP TAY, chỉ xếp bù các môn/tiết còn thiếu vào các ô trống
    */
   public solve(existingFixedSlots?: TimetableSlot[], maxSubjectPerSession?: number): SolverResult {
     const startTime = performance.now();
     this.iterations = 0;
     this.backtrackCount = 0;
 
-    // 1. Khởi tạo danh sách slots với CỐ ĐỊNH tiết Chào cờ vào Thứ 2 Tiết 1 Buổi Sáng cho TẤT CẢ các lớp
-    const currentSlots: TimetableSlot[] = [];
+    // 1. Khởi tạo danh sách slots: BẢO TOÀN NGUYÊN VẸN TẤT CẢ CÁC SLOTS ĐÃ CÓ (TIẾT XẾP TAY)
+    const currentSlots: TimetableSlot[] = existingFixedSlots && existingFixedSlots.length > 0
+      ? existingFixedSlots.map((s) => ({ ...s }))
+      : [];
 
-    // Nếu có existingFixedSlots, giữ lại các slot cố định không phải của bài toán này
-    if (existingFixedSlots && existingFixedSlots.length > 0) {
-      for (const s of existingFixedSlots) {
-        currentSlots.push({ ...s });
-      }
-    }
-
-    // Đảm bảo mỗi lớp đều có 1 slot Chào cờ cố định vào Thứ 2 Tiết 1
+    // Đảm bảo mỗi lớp đều có 1 slot Chào cờ cố định vào Thứ 2 Tiết 1 nếu chưa có
     for (const cls of this.classes) {
       const hasCC = currentSlots.some((s) => {
         const match = s.classId === cls.id || (s.classIds && s.classIds.includes(cls.id));
@@ -151,13 +161,13 @@ export class TimetableSolver {
       }
     }
 
-    // Phân rã Phân công giảng dạy thành các đơn vị tiết học (SchedulingTasks)
-    const tasks = this.decomposeAssignmentsToTasks(effectiveAssignments);
+    // 3. Phân rã Phân công giảng dạy thành các đơn vị tiết học - CHỈ TẠO TASK CHO CÁC TIẾT CÒN THIẾU
+    const tasks = this.decomposeAssignmentsToTasks(effectiveAssignments, currentSlots);
 
-    // 3. Sắp xếp thứ tự các task theo MRV & Degree Heuristic
+    // 4. Sắp xếp thứ tự các task theo MRV & Degree Heuristic
     this.orderTasksByMRV(tasks);
 
-    // 4. Cố định trước tiết Sinh hoạt lớp (SHL) vào Thứ 7 Tiết 5 (hoặc Tiết 4) cho từng lớp
+    // 5. Cố định trước tiết Sinh hoạt lớp (SHL) vào Thứ 7 Tiết 5/4 nếu chưa xếp
     const remainingTasks: SchedulingTask[] = [];
     for (const task of tasks) {
       const sub = this.subjectsMap.get(task.assignment.subjectId);
@@ -176,15 +186,21 @@ export class TimetableSolver {
       }
     }
 
-    // 5. Chạy CSP Backtracking với Forward Checking
+    // 6. Chạy CSP Backtracking với Forward Checking cho các tasks còn thiếu
     const unplacedTasks: SchedulingTask[] = [];
     const success = this.assignSlotRecursive(0, remainingTasks, currentSlots, unplacedTasks);
 
-    // 6. Nếu còn bất kỳ task nào chưa được xếp (do CSP chạm ngưỡng bước lặp hoặc ràng buộc hẹp),
-    // kích hoạt bộ Greedy Conflict-Free Placer để xếp toàn bộ mà không gây xung đột
+    // 7. Nếu còn bất kỳ task nào chưa được xếp, kích hoạt bộ Greedy Conflict-Free Placer
     if (unplacedTasks.length > 0 || !success) {
       const stillPending = tasks.filter((t) => {
-        const scheduledCount = currentSlots.filter((s) => s.assignmentId === t.assignment.id).length;
+        const scheduledCount = currentSlots.filter((s) => {
+          if (s.subjectId === 'SUB_OFF') return false;
+          if (s.assignmentId && s.assignmentId === t.assignment.id) return true;
+          return (
+            s.subjectId === t.assignment.subjectId &&
+            t.assignment.classIds.some((cId) => s.classId === cId || (s.classIds && s.classIds.includes(cId)))
+          );
+        }).length;
         return scheduledCount < t.assignment.periodsPerWeek;
       });
 
@@ -193,45 +209,47 @@ export class TimetableSolver {
       }
     }
 
+    // 8. Lọc các tasks vẫn không thể xếp được (do vướng tiết đã xếp tay hoặc lịch bận) để xây dựng báo cáo nhắc nhở
+    const finalUnplacedTasks = tasks.filter((t) => {
+      const scheduledCount = currentSlots.filter((s) => {
+        if (s.subjectId === 'SUB_OFF') return false;
+        if (s.assignmentId && s.assignmentId === t.assignment.id) return true;
+        return (
+          s.subjectId === t.assignment.subjectId &&
+          t.assignment.classIds.some((cId) => s.classId === cId || (s.classIds && s.classIds.includes(cId)))
+        );
+      }).length;
+      return scheduledCount < t.assignment.periodsPerWeek;
+    });
+
+    const unplacedReminders = this.buildUnplacedReminders(finalUnplacedTasks, currentSlots);
+
     const endTime = performance.now();
     const executionTimeMs = Math.round(endTime - startTime);
-
-    // Kiểm tra xem có bao nhiêu môn học bị phân công trùng 2+ GV (chưa ghép lớp)
-    const dupMap = new Map<string, number>();
-    this.assignments.forEach((a) => {
-      if (!a.isMerged && (!a.classIds || a.classIds.length <= 1) && (!a.teacherIds || a.teacherIds.length <= 1)) {
-        a.classIds.forEach((cId) => {
-          const key = `${cId}_${a.subjectId}`;
-          dupMap.set(key, (dupMap.get(key) || 0) + 1);
-        });
-      }
-    });
-    let dupCount = 0;
-    dupMap.forEach((count) => {
-      if (count > 1) dupCount++;
-    });
-
-    const warningNote = dupCount > 0
-      ? ` ⚠️ Lưu ý: Có ${dupCount} môn học bị phân công trùng 2+ GV (Chưa tạo nhóm ở menu 'Ghép Lớp').`
-      : '';
+    const initialSlotCount = existingFixedSlots ? existingFixedSlots.length : 0;
+    const newlyPlacedCount = Math.max(0, currentSlots.length - initialSlotCount);
 
     return {
-      success: true,
+      success: unplacedReminders.length === 0,
       slots: currentSlots,
       iterations: this.iterations,
       backtrackCount: this.backtrackCount,
       executionTimeMs,
-      message: `Đã tự động xếp xong ${currentSlots.length} tiết cho toàn trường thỏa mãn 100% ràng buộc cứng.${warningNote}`,
+      message: unplacedReminders.length === 0
+        ? `Đã tự động xếp bổ sung ${newlyPlacedCount} tiết cho toàn trường thỏa mãn 100% ràng buộc cứng mà không đụng chạm đến các tiết đã xếp tay!`
+        : `Đã xếp bổ sung được ${newlyPlacedCount} tiết cho toàn trường. Phát hiện ${unplacedReminders.length} môn học bị vướng ràng buộc với các tiết đã xếp tay.`,
+      unplacedReminders,
     };
   }
 
   /**
    * Khởi chạy xếp TKB TỰ ĐỘNG CHO 1 LỚP CỤ THỂ (Class-Specific Auto Schedule)
-   * Giữ nguyên lịch của các lớp khác làm ràng buộc cố định để không trùng giáo viên
+   * BẢO TOÀN 100% LỊCH CỦA CÁC LỚP KHÁC VÀ CÁC TIẾT ĐÃ XẾP TAY CỦA LỚP NÀY!
+   * Chỉ điền bù các môn còn thiếu vào các ô tiết còn trống.
    */
   public solveForClass(
     targetClassId: string,
-    existingSlots: TimetableSlot[],
+    existingSlots: TimetableSlot[] = [],
     maxSubjectPerSession?: number
   ): SolverResult {
     const startTime = performance.now();
@@ -250,29 +268,35 @@ export class TimetableSolver {
       };
     }
 
-    // 1. Giữ nguyên tất cả các slots của các LỚP KHÁC
-    const otherClassSlots = existingSlots.filter((s) => {
+    // 1. BẢO TOÀN NGUYÊN VẸN 100% TẤT CẢ CÁC SLOTS ĐÃ CÓ (Bao gồm cả tiết xếp tay của lớp mục tiêu và các lớp khác)
+    const currentSlots: TimetableSlot[] = existingSlots && existingSlots.length > 0
+      ? existingSlots.map((s) => ({ ...s }))
+      : [];
+
+    // 2. Khởi tạo / Giữ lại tiết Chào Cờ cho lớp mục tiêu (Thứ 2 Tiết 1 Sáng) nếu chưa có
+    const hasCC = currentSlots.some((s) => {
       const match = s.classId === targetClassId || (s.classIds && s.classIds.includes(targetClassId));
-      return !match;
+      const sSess = s.session || (s.period <= 5 ? 'MORNING' : 'AFTERNOON');
+      const sPeriod = s.session ? s.period : (s.period <= 5 ? s.period : s.period - 5);
+      return match && s.day === 2 && sSess === 'MORNING' && sPeriod === 1;
     });
 
-    const currentSlots: TimetableSlot[] = [...otherClassSlots];
-
-    // 2. Khởi tạo / Giữ lại tiết Chào Cờ cho lớp mục tiêu (Thứ 2 Tiết 1 Sáng)
-    currentSlots.push({
-      id: `SLOT_CC_${targetClassId}`,
-      day: 2,
-      period: 1,
-      session: 'MORNING',
-      classId: targetClassId,
-      classIds: [targetClassId],
-      teacherId: targetClass.homeroomTeacherId || '',
-      roomId: 'R_SAN_TRUONG',
-      assignmentId: `ASG_CC_${targetClassId}`,
-      subjectId: 'SUB_CC',
-      isMerged: false,
-      isCoTeaching: false,
-    });
+    if (!hasCC) {
+      currentSlots.push({
+        id: `SLOT_CC_${targetClassId}`,
+        day: 2,
+        period: 1,
+        session: 'MORNING',
+        classId: targetClassId,
+        classIds: [targetClassId],
+        teacherId: targetClass.homeroomTeacherId || '',
+        roomId: 'R_SAN_TRUONG',
+        assignmentId: `ASG_CC_${targetClassId}`,
+        subjectId: 'SUB_CC',
+        isMerged: false,
+        isCoTeaching: false,
+      });
+    }
 
     // 3. Lấy toàn bộ phân công của riêng lớp mục tiêu
     let classAssignments = this.assignments.filter((a) => a.classIds.includes(targetClassId));
@@ -303,11 +327,12 @@ export class TimetableSolver {
       ];
     }
 
-    // 4. Phân rã thành tasks
-    const tasks = this.decomposeAssignmentsToTasks(classAssignments);
+    // 4. Phân rã thành tasks - CHỈ TẠO TASK CHO CÁC TIẾT CÒN THIẾU CỦA LỚP NÀY (ĐÃ TRỪ TIẾT XẾP TAY)
+    const tasks = this.decomposeAssignmentsToTasks(classAssignments, currentSlots);
     this.orderTasksByMRV(tasks);
 
-    // 5. Cố định Sinh hoạt lớp trước
+    // 5. Cố định Sinh hoạt lớp trước nếu chưa có
+    const remainingTasks: SchedulingTask[] = [];
     for (const task of tasks) {
       const sub = this.subjectsMap.get(task.assignment.subjectId);
       const isSHL =
@@ -316,53 +341,51 @@ export class TimetableSolver {
         task.assignment.subjectId === 'SUB_SHL';
 
       if (isSHL) {
-        this.tryPlaceSpecialSHL(task, currentSlots);
+        const placed = this.tryPlaceSpecialSHL(task, currentSlots);
+        if (!placed) remainingTasks.push(task);
+      } else {
+        remainingTasks.push(task);
       }
     }
 
-    // 6. Xếp các môn còn lại bằng thuật toán tối ưu không xung đột
-    for (const task of tasks) {
-      const sub = this.subjectsMap.get(task.assignment.subjectId);
-      const isSHL =
-        sub?.code === 'SHL' ||
-        sub?.name.toLowerCase().includes('sinh hoạt') ||
-        task.assignment.subjectId === 'SUB_SHL';
-
-      if (isSHL) continue; // Đã xếp ở trên
-
-      // Kiểm tra xem task này đã được xếp đủ số tiết chưa
-      const scheduledCount = currentSlots.filter(
-        (s) =>
-          (s.classId === targetClassId || (s.classIds && s.classIds.includes(targetClassId))) &&
-          s.assignmentId === task.assignment.id
-      ).length;
-
-      if (scheduledCount < task.assignment.periodsPerWeek) {
-        this.greedyPlaceTask(task, currentSlots, maxSubjectPerSession);
+    // 6. Xếp các môn còn thiếu vào các ô trống còn lại
+    const unplacedTasks: SchedulingTask[] = [];
+    for (const task of remainingTasks) {
+      const placed = this.greedyPlaceTask(task, currentSlots, maxSubjectPerSession);
+      if (!placed) {
+        unplacedTasks.push(task);
       }
     }
+
+    // 7. Thu thập báo cáo chi tiết các môn/tiết không thể xếp được do vướng ràng buộc
+    const unplacedReminders = this.buildUnplacedReminders(unplacedTasks, currentSlots);
 
     const endTime = performance.now();
     const executionTimeMs = Math.round(endTime - startTime);
-
-    const targetClassSlotsCount = currentSlots.filter(
-      (s) => s.classId === targetClassId || (s.classIds && s.classIds.includes(targetClassId))
-    ).length;
+    const initialSlotCount = existingSlots ? existingSlots.length : 0;
+    const newlyPlacedCount = Math.max(0, currentSlots.length - initialSlotCount);
 
     return {
-      success: true,
+      success: unplacedReminders.length === 0,
       slots: currentSlots,
       iterations: this.iterations,
       backtrackCount: this.backtrackCount,
       executionTimeMs,
-      message: `Đã tự động xếp xong ${targetClassSlotsCount} tiết cho ${targetClass.name}!`,
+      message: unplacedReminders.length === 0
+        ? `Đã tự động xếp bổ sung ${newlyPlacedCount} tiết còn thiếu cho lớp ${targetClass.name} vào các ô trống!`
+        : `Đã xếp bổ sung được ${newlyPlacedCount} tiết cho lớp ${targetClass.name}. Còn ${unplacedReminders.length} môn bị vướng ràng buộc với các tiết đã xếp tay.`,
+      unplacedReminders,
     };
   }
 
   /**
    * Phân rã PCGD thành từng tiết hoặc cặp tiết
+   * CHỈ TẠO TASK CHO SỐ TIẾT CÒN THIẾU (ĐÃ TRỪ CÁC TIẾT ĐÃ CÓ / ĐÃ XẾP TAY)
    */
-  private decomposeAssignmentsToTasks(assignmentsList: TeachingAssignment[]): SchedulingTask[] {
+  private decomposeAssignmentsToTasks(
+    assignmentsList: TeachingAssignment[],
+    existingSlots: TimetableSlot[] = []
+  ): SchedulingTask[] {
     const tasks: SchedulingTask[] = [];
 
     for (const asg of assignmentsList) {
@@ -385,8 +408,24 @@ export class TimetableSolver {
         }
       }
 
-      let remaining = resolvedAssignment.periodsPerWeek;
-      let unitIndex = 1;
+      // Đếm số tiết của phân công này ĐÃ CÓ SẴN trong existingSlots (tiết đã xếp tay hoặc đã có từ trước)
+      const alreadyScheduledCount = existingSlots.filter((s) => {
+        if (s.subjectId === 'SUB_OFF') return false;
+        // Trực tiếp theo assignmentId
+        if (s.assignmentId && s.assignmentId === resolvedAssignment.id) return true;
+        // Khớp theo môn học và lớp học
+        if (s.subjectId === resolvedAssignment.subjectId) {
+          const matchClass = resolvedAssignment.classIds.some(
+            (cId) => s.classId === cId || (s.classIds && s.classIds.includes(cId))
+          );
+          if (matchClass) return true;
+        }
+        return false;
+      }).length;
+
+      // CHỈ TẠO TASK CHO SỐ TIẾT CÒN THIẾU (CHƯA ĐƯỢC XẾP)
+      let remaining = Math.max(0, resolvedAssignment.periodsPerWeek - alreadyScheduledCount);
+      let unitIndex = alreadyScheduledCount + 1;
 
       while (remaining > 0) {
         if (resolvedAssignment.doublePeriodsAllowed && remaining >= 2) {
@@ -412,6 +451,148 @@ export class TimetableSolver {
     }
 
     return tasks;
+  }
+
+  /**
+   * Phân tích và xây dựng danh sách nhắc nhở chi tiết đối với những tiết không thể xếp được
+   * do vướng ràng buộc (bị trùng giáo viên đã xếp tay ở lớp khác hoặc lịch bận)
+   */
+  private buildUnplacedReminders(
+    unplacedTasks: SchedulingTask[],
+    currentSlots: TimetableSlot[]
+  ): UnplacedReminder[] {
+    const reminderMap = new Map<string, UnplacedReminder>();
+
+    for (const task of unplacedTasks) {
+      const asg = task.assignment;
+      const key = `${asg.id}_${asg.subjectId}`;
+      if (reminderMap.has(key)) {
+        const item = reminderMap.get(key)!;
+        item.missingPeriods += task.duration;
+        continue;
+      }
+
+      const classNames = asg.classIds
+        .map((cId) => this.classesMap.get(cId)?.name || cId)
+        .join(', ');
+      const sub = this.subjectsMap.get(asg.subjectId);
+      const subjectName = sub?.name || asg.subjectId;
+      const teacherNames = asg.teacherIds
+        .map((tId) => this.teachersMap.get(tId)?.name || tId)
+        .join(' + ') || 'Chưa gán GV';
+
+      // Phân tích các ô trống của lớp và xác định lý do vướng
+      const reasons: string[] = [];
+      const recommendations: string[] = [];
+
+      const preferredShift = sub?.preferredShift || 'ANY';
+      const primaryClass = asg.classIds[0] ? this.classesMap.get(asg.classIds[0]) : undefined;
+      const classShift = primaryClass?.shift || 'MORNING';
+
+      let allowedSessions: ('MORNING' | 'AFTERNOON')[] = ['MORNING', 'AFTERNOON'];
+      if (preferredShift === 'MORNING') allowedSessions = ['MORNING'];
+      else if (preferredShift === 'AFTERNOON') allowedSessions = ['AFTERNOON'];
+      else if (classShift === 'AFTERNOON') allowedSessions = ['AFTERNOON', 'MORNING'];
+
+      let emptySlotCountForClass = 0;
+      let teacherConflictCount = 0;
+      let teacherUnavailableCount = 0;
+      const recordedConflicts = new Set<string>();
+
+      for (const session of allowedSessions) {
+        const maxP = session === 'MORNING' ? 5 : 4;
+        for (const { key: day } of DAYS_OF_WEEK) {
+          for (let p = 1; p <= maxP; p++) {
+            const period = p as PeriodOfDay;
+            if (day === 2 && period === 1 && session === 'MORNING') continue;
+
+            // Kiểm tra xem các lớp của phân công này có ô trống ở (day, period, session) không
+            const isAnyClassOccupied = asg.classIds.some((cId) => {
+              return currentSlots.some((s) => {
+                const matchClass = s.classId === cId || (s.classIds && s.classIds.includes(cId));
+                const sSess = s.session || (s.period <= 5 ? 'MORNING' : 'AFTERNOON');
+                const sPeriod = s.session ? s.period : (s.period <= 5 ? s.period : s.period - 5);
+                return matchClass && s.day === day && sSess === session && sPeriod === period;
+              });
+            });
+
+            if (!isAnyClassOccupied) {
+              emptySlotCountForClass++;
+
+              // Lớp trống ô này, kiểm tra lý do GV không thể vào
+              for (const tId of asg.teacherIds) {
+                const teacher = this.teachersMap.get(tId);
+
+                // 1. Kiểm tra lịch bận GV
+                if (teacher && !ValidationEngine.checkTeacherAvailability(teacher, day, period, session)) {
+                  teacherUnavailableCount++;
+                  const reasonMsg = `Tại ${session === 'MORNING' ? 'Sáng' : 'Chiều'} Thứ ${day} Tiết ${period}: GV ${teacher.name} có lịch bận/nguyện vọng nghỉ.`;
+                  if (!recordedConflicts.has(reasonMsg)) {
+                    recordedConflicts.add(reasonMsg);
+                    reasons.push(reasonMsg);
+                  }
+                }
+
+                // 2. Kiểm tra trùng tiết với lớp khác (tiết đã xếp tay hoặc xếp trước)
+                const occupyingSlot = currentSlots.find((s) => {
+                  if (s.subjectId === 'SUB_OFF') return false;
+                  const tMatch = s.teacherId === tId || (s.teacherIds && s.teacherIds.includes(tId));
+                  if (!tMatch) return false;
+                  const sSess = s.session || (s.period <= 5 ? 'MORNING' : 'AFTERNOON');
+                  const sPeriod = s.session ? s.period : (s.period <= 5 ? s.period : s.period - 5);
+                  return s.day === day && sSess === session && sPeriod === period;
+                });
+
+                if (occupyingSlot) {
+                  teacherConflictCount++;
+                  const otherClassName = this.classesMap.get(occupyingSlot.classId)?.name || occupyingSlot.classId;
+                  const otherSubName = this.subjectsMap.get(occupyingSlot.subjectId)?.name || occupyingSlot.subjectId;
+                  const reasonMsg = `Tại ${session === 'MORNING' ? 'Sáng' : 'Chiều'} Thứ ${day} Tiết ${period}: GV ${teacher?.name || tId} bị trùng lịch dạy môn ${otherSubName} tại lớp ${otherClassName} (đã xếp trước/xếp tay).`;
+                  if (!recordedConflicts.has(reasonMsg)) {
+                    recordedConflicts.add(reasonMsg);
+                    reasons.push(reasonMsg);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (emptySlotCountForClass === 0) {
+        reasons.push(`Lớp ${classNames} đã kín hết tất cả các ô tiết trong tuần (không còn ô trống nào).`);
+        recommendations.push(`Khuyến nghị: Kiểm tra lại tổng số tiết phân công của lớp ${classNames} hoặc cân nhắc mở thêm buổi chiều.`);
+      } else {
+        if (teacherConflictCount > 0) {
+          recommendations.push(
+            `Khuyến nghị: Thử di chuyển hoặc đổi lịch các tiết đã xếp tay của giáo viên ${teacherNames} ở các lớp bị trùng sang tiết khác để tạo khoảng trống cho lớp ${classNames}.`
+          );
+        }
+        if (teacherUnavailableCount > 0) {
+          recommendations.push(
+            `Khuyến nghị: Kiểm tra lại phần đăng ký 'Lịch bận cố định' hoặc 'Nguyện vọng nghỉ' của giáo viên ${teacherNames} để mở thêm tiết dạy.`
+          );
+        }
+      }
+
+      // Giới hạn hiển thị tối đa 4 lý do cụ thể nhất
+      const trimmedReasons = reasons.slice(0, 4);
+
+      reminderMap.set(key, {
+        assignmentId: asg.id,
+        classId: asg.classIds[0],
+        className: classNames,
+        subjectId: asg.subjectId,
+        subjectName,
+        teacherId: asg.teacherIds[0] || '',
+        teacherName: teacherNames,
+        missingPeriods: task.duration,
+        reasons: trimmedReasons.length > 0 ? trimmedReasons : ['Không tìm được ô tiết trống thỏa mãn tất cả ràng buộc giáo viên và môn học.'],
+        recommendations: recommendations.length > 0 ? recommendations : ['Thử điều chỉnh lại các tiết đã xếp tay xung quanh để mở thêm phương án xếp.'],
+      });
+    }
+
+    return Array.from(reminderMap.values());
   }
 
   /**

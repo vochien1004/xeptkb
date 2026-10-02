@@ -58,7 +58,7 @@ import {
   saveAssignmentToFirebase,
   saveMultipleAssignmentsToFirebase,
 } from '../services/firebaseClient';
-import { TimetableSolver } from '../services/timetableSolver';
+import { TimetableSolver, UnplacedReminder } from '../services/timetableSolver';
 import { MergedClassHandler } from '../services/mergedClassHandler';
 
 interface Props {
@@ -133,6 +133,13 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
     assignmentId?: string;
   } | null>(null);
 
+  // Đảm bảo thẻ môn đang chọn luôn thuộc về lớp hiện tại (chỉ hủy nếu thẻ môn không khớp lớp đang chọn)
+  useEffect(() => {
+    if (selectedSubjectCard && selectedSubjectCard.classId !== selectedClassId) {
+      setSelectedSubjectCard(null);
+    }
+  }, [selectedClassId, selectedSubjectCard]);
+
   // Chế độ chọn "Nghỉ" để gán tiết nghỉ
   const [isOffMode, setIsOffMode] = useState(false);
 
@@ -181,6 +188,14 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
     confirmLabel?: string;
     confirmStyle?: 'danger' | 'warning' | 'primary';
     onConfirm: () => void;
+  } | null>(null);
+
+  // Modal hiển thị báo cáo & nhắc nhở các môn chưa thể tự động xếp do vướng ràng buộc
+  const [autoScheduleReportModal, setAutoScheduleReportModal] = useState<{
+    isOpen: boolean;
+    targetName: string;
+    newlyPlacedCount: number;
+    reminders: UnplacedReminder[];
   } | null>(null);
 
   // Trạng thái lưu trữ TKB đang xếp lên Firebase Cloud
@@ -424,6 +439,52 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
     });
   };
 
+  // Tự động kiểm tra và dọn dẹp các môn không có trong PCGD của lớp (ví dụ do nạp nhầm từ cache)
+  useEffect(() => {
+    if (classes.length === 0 || assignments.length === 0 || slots.length === 0) return;
+
+    const validClassIds = new Set(classes.map((c) => c.id));
+    const classSubjectMap = new Map<string, Set<string>>();
+    assignments.forEach((a) => {
+      if (Array.isArray(a.classIds)) {
+        a.classIds.forEach((cId) => {
+          if (!classSubjectMap.has(cId)) classSubjectMap.set(cId, new Set());
+          classSubjectMap.get(cId)!.add(a.subjectId);
+        });
+      }
+      if ((a as any).classId) {
+        const cId = (a as any).classId;
+        if (!classSubjectMap.has(cId)) classSubjectMap.set(cId, new Set());
+        classSubjectMap.get(cId)!.add(a.subjectId);
+      }
+    });
+
+    const cleaned = slots.filter((slot) => {
+      if (slot.subjectId === 'SUB_OFF') return true;
+      if (
+        slot.subjectId === 'SUB_CC' ||
+        slot.subjectId === 'SUB_SHL' ||
+        slot.subjectId === ccSubject.id ||
+        slot.subjectId === shlSubject.id ||
+        slot.assignmentId?.startsWith('ASG_CC_') ||
+        slot.assignmentId?.startsWith('ASG_SHL_')
+      ) {
+        return true;
+      }
+      const cId = slot.classId;
+      if (!validClassIds.has(cId)) return false;
+      const allowed = classSubjectMap.get(cId);
+      return allowed ? allowed.has(slot.subjectId) : false;
+    });
+
+    if (cleaned.length < slots.length) {
+      console.warn(`[ClassScheduleDistributor] Đã loại bỏ ${slots.length - cleaned.length} tiết không có trong PCGD của lớp!`);
+      setSlots(cleaned);
+      persistSlotsToCloud(cleaned);
+      onDataUpdated?.();
+    }
+  }, [classes, assignments, slots.length, ccSubject.id, shlSubject.id]);
+
   // Thao tác khi click vào một ô trong bảng TKB lớp
   const handleCellClick = async (
     classId: string,
@@ -530,11 +591,11 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
       }
 
       // -----------------------------------------------------------------
-      // RÀNG BUỘC 1: KHÔNG CHO PHÉP NHẬP QUÁ SỐ TIẾT/MÔN THEO PCGD (HOẶC 1 TIẾT SHL)
+      // RÀNG BUỘC 0 & 1: KIỂM TRA MÔN HỌC CÓ NẰM TRONG PCGD VÀ CHƯA VƯỢT QUÁ SỐ TIẾT
       // -----------------------------------------------------------------
       const targetAsg = assignments.find(
         (a) =>
-          a.classIds.includes(classId) &&
+          ((a.classIds && a.classIds.includes(classId)) || (a as any).classId === classId) &&
           (a.subjectId === subjectId ||
             (isShl &&
               (a.subjectId === 'SUB_SHL' ||
@@ -542,6 +603,16 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                 subjectsMap.get(a.subjectId)?.code === 'SHL' ||
                 subjectsMap.get(a.subjectId)?.name.toLowerCase().includes('sinh hoạt'))))
       );
+
+      // Nếu môn này hoàn toàn không có trong PCGD của lớp (và không phải Sinh hoạt lớp) -> Báo lỗi & Chặn!
+      if (!targetAsg && !isShl) {
+        showToast(
+          `⚠️ Môn "${subName}" không có trong Phân công giảng dạy của lớp ${className}! Không thể xếp vào lớp này.`,
+          'ERROR'
+        );
+        return;
+      }
+
       const assignedPeriods = targetAsg?.periodsPerWeek ?? (isShl ? 1 : 0);
       const currentScheduledCount = getScheduledCountForSubjectInClass(classId, subjectId);
 
@@ -1227,12 +1298,12 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
     showToast('Đã dồn tiết gọn buổi thành công!');
   };
 
-  // Tự động xếp cho 1 lớp hoặc toàn trường
+  // Tự động xếp cho 1 lớp hoặc toàn trường (BẢO TOÀN 100% CÁC TIẾT ĐÃ XẾP TAY)
   const handleRunAuto = async (targetClassId?: string) => {
     const targetClass = targetClassId ? classesMap.get(targetClassId) : undefined;
     const targetName = targetClass?.name || targetClassId || 'Toàn trường';
 
-    showToast(`Đang chạy thuật toán TKB Engine tự động xếp cho ${targetName}...`);
+    showToast(`Đang chạy thuật toán TKB Engine tự động xếp bù cho ${targetName}...`);
     pushUndo(slots);
 
     const solver = new TimetableSolver(
@@ -1245,28 +1316,40 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
 
     let result;
     if (targetClassId) {
-      // Tự động xếp cho 1 lớp mục tiêu, bảo toàn lịch các lớp khác làm ràng buộc không trùng GV
+      // Tự động xếp cho 1 lớp mục tiêu, bảo toàn 100% các tiết đã xếp tay của lớp và các lớp khác
       result = solver.solveForClass(targetClassId, slots, maxSubjectPerSession);
     } else {
-      // Tự động xếp cho toàn trường
-      result = solver.solve(undefined, maxSubjectPerSession);
+      // Tự động xếp cho toàn trường, bảo toàn 100% các tiết đã xếp tay của tất cả các lớp
+      result = solver.solve(slots, maxSubjectPerSession);
     }
 
-    if (result.slots && result.slots.length > 0) {
+    if (result.slots && result.slots.length >= slots.length) {
       setSlots(result.slots);
       await persistSlotsToCloud(result.slots);
       onDataUpdated?.();
 
-      if (targetClassId) {
-        const classSlotsCount = result.slots.filter(
-          (s) =>
-            (s.classId === targetClassId || (s.classIds && s.classIds.includes(targetClassId))) &&
-            s.subjectId !== 'SUB_OFF'
-        ).length;
-        showToast(`✓ Đã tự động xếp xong ${classSlotsCount} tiết cho ${targetName}!`, 'SUCCESS');
+      const newlyPlacedCount = result.slots.length - slots.length;
+
+      // NẾU CÓ TIẾT KHÔNG THỂ XẾP ĐƯỢC DO VƯỚNG RÀNG BUỘC VỚI TIẾT ĐÃ XẾP TAY
+      if (result.unplacedReminders && result.unplacedReminders.length > 0) {
+        setAutoScheduleReportModal({
+          isOpen: true,
+          targetName,
+          newlyPlacedCount,
+          reminders: result.unplacedReminders,
+        });
       } else {
-        const totalCount = result.slots.filter((s) => s.subjectId !== 'SUB_OFF').length;
-        showToast(`✓ Đã tự động xếp xong ${totalCount} tiết cho toàn trường!`, 'SUCCESS');
+        if (newlyPlacedCount > 0) {
+          showToast(
+            `✓ Đã tự động xếp bổ sung ${newlyPlacedCount} tiết còn thiếu cho ${targetName} vào các ô trống mà không ảnh hưởng đến các tiết đã xếp tay!`,
+            'SUCCESS'
+          );
+        } else {
+          showToast(
+            `Tất cả các môn của ${targetName} đã được xếp đầy đủ từ trước (không có tiết nào bị thiếu).`,
+            'SUCCESS'
+          );
+        }
       }
     } else {
       showToast('Không tìm được slot phù hợp cho cấu hình hiện tại.', 'ERROR');
@@ -1532,39 +1615,58 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
     });
   };
 
-  // Xử lý khi nhấn vào bất kỳ lớp nào ở bảng bên phải -> Bảng bên trái hiển thị thời khóa biểu của lớp đó
-  const handleSelectClassFromRight = (targetClassId: string, preferredSubjectId?: string) => {
+  // Xử lý khi nhấn vào bất kỳ lớp nào ở bảng TKB mini hoặc danh sách lớp bên phải
+  // -> Bảng bên trái hiển thị TKB của lớp đó VÀ VẪN GIỮ CHẾ ĐỘ XEM MÔN CỦA GV ĐÓ
+  const handleSelectClassFromRight = (
+    targetClassId: string,
+    preferredSubjectId?: string,
+    teacherIdToKeep?: string
+  ) => {
     if (!targetClassId) return;
+
+    const teacherToMatch = teacherIdToKeep || activeTeacher?.id;
+    const subjectToMatch = preferredSubjectId || activeSubject?.id;
 
     // 1. Chuyển chọn lớp cho bảng bên trái
     setSelectedClassId(targetClassId);
     setViewAllClasses(false); // Chuyển sang hiển thị trực diện TKB của lớp này
 
     // 2. Tìm phân công môn học của lớp này để giữ trạng thái liên kết môn / giáo viên
-    const classAssigns = assignments.filter((a) => a.classIds.includes(targetClassId));
+    const classAssigns = assignments.filter((a) =>
+      (Array.isArray(a.classIds) && a.classIds.includes(targetClassId)) ||
+      (a as any).classId === targetClassId
+    );
 
-    // Ưu tiên 1: Môn mà giáo viên hiện tại đang dạy ở lớp đó (để giữ nguyên giáo viên đang xem)
-    let matchedAssign = activeTeacher
-      ? classAssigns.find((a) => a.teacherIds.includes(activeTeacher.id))
+    // Ưu tiên 1: Phân công khớp cả GV đó và môn học đó ở lớp mục tiêu
+    let matchedAssign = teacherToMatch && subjectToMatch
+      ? classAssigns.find((a) => a.teacherIds.includes(teacherToMatch) && a.subjectId === subjectToMatch)
       : undefined;
 
-    // Ưu tiên 2: Khớp theo preferredSubjectId nếu có
-    if (!matchedAssign && preferredSubjectId) {
-      matchedAssign = classAssigns.find((a) => a.subjectId === preferredSubjectId);
+    // Ưu tiên 2: Phân công có GV đó dạy ở lớp mục tiêu (để giữ nguyên GV và môn của GV đó)
+    if (!matchedAssign && teacherToMatch) {
+      matchedAssign = classAssigns.find((a) => a.teacherIds.includes(teacherToMatch));
     }
 
-    // Ưu tiên 3: Nếu không có, lấy phân công đầu tiên của lớp này
+    // Ưu tiên 3: Khớp theo preferredSubjectId nếu có
+    if (!matchedAssign && subjectToMatch) {
+      matchedAssign = classAssigns.find((a) => a.subjectId === subjectToMatch);
+    }
+
+    // Ưu tiên 4: Nếu không có, lấy phân công đầu tiên của lớp này
     if (!matchedAssign && classAssigns.length > 0) {
       matchedAssign = classAssigns[0];
     }
 
     if (matchedAssign) {
+      const actualTeacherId = teacherToMatch && matchedAssign.teacherIds.includes(teacherToMatch)
+        ? teacherToMatch
+        : matchedAssign.teacherIds[0] || '';
+
       setSelectedSubjectCard({
         classId: targetClassId,
         subjectId: matchedAssign.subjectId,
-        teacherId: activeTeacher && matchedAssign.teacherIds.includes(activeTeacher.id)
-          ? activeTeacher.id
-          : matchedAssign.teacherIds[0] || '',
+        teacherId: actualTeacherId,
+        assignmentId: matchedAssign.id,
       });
     }
 
@@ -1574,10 +1676,17 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-    }, 50);
+    }, 80);
 
     const targetClass = classesMap.get(targetClassId);
-    showToast(`Đã chuyển sang xem thời khóa biểu ${targetClass?.name || targetClassId}`, 'SUCCESS');
+    const subName = matchedAssign
+      ? subjectsMap.get(matchedAssign.subjectId)?.name || matchedAssign.subjectId
+      : '';
+    const teacherName = teacherToMatch ? teachersMap.get(teacherToMatch)?.name : '';
+    showToast(
+      `✓ Đã chuyển sang ${targetClass?.name || targetClassId}${subName ? ` - Giữ chế độ xem môn: ${subName}` : ''}${teacherName ? ` (GV: ${teacherName})` : ''}`,
+      'SUCCESS'
+    );
   };
 
   return (
@@ -1890,20 +1999,20 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                 }`}
               >
                 {/* BẢNG TKB CỦA LỚP */}
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs text-center">
+                <div className="overflow-x-auto w-full max-w-full custom-scrollbar pb-1">
+                  <table className="w-full min-w-[760px] sm:min-w-[850px] border-collapse text-xs text-center">
                     <thead>
                       <tr className="bg-slate-50 border-b-2 border-slate-300 text-slate-800 font-black text-[11px] uppercase">
-                        <th className="py-2.5 px-3 w-16 border-r border-slate-200">Lớp</th>
-                        <th className="py-2.5 px-2 w-14 border-r border-slate-200">Buổi</th>
-                        <th className="py-2.5 px-2 w-14 border-r border-slate-200">Tiết</th>
-                        <th className="py-2.5 px-3 w-28 border-r border-slate-200">Thời gian</th>
+                        <th className="py-2.5 px-2 w-14 border-r border-slate-200">Lớp</th>
+                        <th className="py-2.5 px-1.5 w-12 border-r border-slate-200">Buổi</th>
+                        <th className="py-2.5 px-1.5 w-12 border-r border-slate-200">Tiết</th>
+                        <th className="py-2.5 px-2 w-24 sm:w-28 border-r border-slate-200">Thời gian</th>
                         {DAYS.map(({ key, label }) => (
-                          <th key={key} className="py-2.5 px-2 border-r border-slate-200 min-w-20">
+                          <th key={key} className="py-2.5 px-2 border-r border-slate-200 min-w-[100px] sm:min-w-[115px]">
                             {label}
                           </th>
                         ))}
-                        <th className="py-2.5 px-2 w-16 text-center">
+                        <th className="py-2.5 px-2 w-14 text-center">
                           <button
                             type="button"
                             onClick={() => handleClearClassTimetable(cls.id)}
@@ -2080,7 +2189,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                   isOff ? (
                                     <span className="text-[11px] italic font-bold">Nghỉ</span>
                                   ) : isSlotCC ? (
-                                    <div className="relative group/cc w-full h-full flex flex-col items-center justify-center">
+                                    <div className="relative group/cc w-full h-full flex items-center justify-center gap-1 px-1 py-0.5">
                                       <div className="leading-tight flex items-center justify-center gap-1">
                                         <span className="text-xs">🚩</span>
                                         <span className="text-xs font-black text-amber-950">Chào cờ</span>
@@ -2088,7 +2197,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                       <button
                                         type="button"
                                         onClick={(e) => handleClearChaoCo(cls.id, e)}
-                                        className="absolute -top-1 -right-0.5 p-0.5 rounded text-amber-800 hover:text-rose-700 hover:bg-amber-200/90 transition-colors cursor-pointer"
+                                        className="p-0.5 rounded text-amber-800 hover:text-rose-700 hover:bg-amber-200/90 transition-colors cursor-pointer shrink-0 opacity-80 hover:opacity-100"
                                         title="Xóa tiết Chào cờ tuần này (có tùy chọn đẩy tiết khác lên)"
                                       >
                                         <Trash2 className="w-3 h-3" />
@@ -2865,19 +2974,23 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                                 key={day}
                                 onClick={() => {
                                   if (slot?.classId && slot.classId !== 'ALL') {
-                                    handleSelectClassFromRight(slot.classId);
+                                    handleSelectClassFromRight(
+                                      slot.classId,
+                                      slot.subjectId || activeSubject?.id,
+                                      activeTeacher.id
+                                    );
                                   }
                                 }}
                                 className={`py-1.5 px-0.5 border-r border-slate-100 last:border-r-0 font-extrabold h-6 transition-all ${
                                   isCurrentClass
-                                    ? 'bg-rose-200 text-rose-950 font-black ring-1 ring-rose-400 cursor-pointer'
+                                    ? 'bg-rose-200 text-rose-950 font-black ring-1 ring-rose-400 cursor-pointer shadow-xs'
                                     : slot
-                                    ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 cursor-pointer shadow-2xs hover:scale-105 active:scale-95'
+                                    ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 hover:ring-1 hover:ring-amber-400 cursor-pointer shadow-2xs hover:scale-105 active:scale-95'
                                     : 'hover:bg-slate-50'
                                 }`}
                                 title={
                                   slot
-                                    ? `Lớp ${classesMap.get(slot.classId)?.name || slot.classId} (Sáng T${day}, T${period}) - Nhấn để xem TKB lớp này`
+                                    ? `Lớp ${classesMap.get(slot.classId)?.name || slot.classId} (${slot.subjectId ? (subjectsMap.get(slot.subjectId)?.shortName || subjectsMap.get(slot.subjectId)?.name || '') : ''} - Sáng T${day}, T${period}) - Nhấn để nhảy sang TKB lớp này (giữ chế độ xem môn GV)`
                                     : undefined
                                 }
                               >
@@ -2922,20 +3035,24 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                               <td
                                 key={day}
                                 onClick={() => {
-                                  if (slot?.classId) {
-                                    handleSelectClassFromRight(slot.classId);
+                                  if (slot?.classId && slot.classId !== 'ALL') {
+                                    handleSelectClassFromRight(
+                                      slot.classId,
+                                      slot.subjectId || activeSubject?.id,
+                                      activeTeacher.id
+                                    );
                                   }
                                 }}
                                 className={`py-1.5 px-0.5 border-r border-slate-100 last:border-r-0 font-extrabold h-6 transition-all ${
                                   isCurrentClass
-                                    ? 'bg-rose-200 text-rose-950 font-black ring-1 ring-rose-400 cursor-pointer'
+                                    ? 'bg-rose-200 text-rose-950 font-black ring-1 ring-rose-400 cursor-pointer shadow-xs'
                                     : slot
-                                    ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 cursor-pointer shadow-2xs hover:scale-105 active:scale-95'
+                                    ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 hover:ring-1 hover:ring-amber-400 cursor-pointer shadow-2xs hover:scale-105 active:scale-95'
                                     : 'hover:bg-slate-50'
                                 }`}
                                 title={
                                   slot
-                                    ? `Lớp ${classesMap.get(slot.classId)?.name || slot.classId} (Chiều T${day}, T${period}) - Nhấn để xem TKB lớp này`
+                                    ? `Lớp ${classesMap.get(slot.classId)?.name || slot.classId} (${slot.subjectId ? (subjectsMap.get(slot.subjectId)?.shortName || subjectsMap.get(slot.subjectId)?.name || '') : ''} - Chiều T${day}, T${period}) - Nhấn để nhảy sang TKB lớp này (giữ chế độ xem môn GV)`
                                     : undefined
                                 }
                               >
@@ -2969,13 +3086,13 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => handleSelectClassFromRight(c.id)}
+                            onClick={() => handleSelectClassFromRight(c.id, activeSubject?.id, activeTeacher.id)}
                             className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
                               isCurrent
                                 ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400 scale-105'
                                 : 'bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100 hover:scale-105 active:scale-95'
                             }`}
-                            title={`Nhấn để mở và xem TKB lớp ${c.name}`}
+                            title={`Nhấn để mở và xem TKB lớp ${c.name} (giữ môn của GV)`}
                           >
                             {c.name}
                           </button>
@@ -3009,7 +3126,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                       return (
                         <div
                           key={c.id}
-                          onClick={() => handleSelectClassFromRight(c.id, asg?.subjectId)}
+                          onClick={() => handleSelectClassFromRight(c.id, asg?.subjectId || activeSubject?.id, activeTeacher.id)}
                           className={`flex items-center justify-between text-[11px] font-bold p-2 rounded-xl border transition-all cursor-pointer ${
                             isCurrent
                               ? 'bg-indigo-50 border-indigo-300 text-indigo-950 ring-2 ring-indigo-200 shadow-xs'
@@ -3070,7 +3187,7 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (cls?.id) handleSelectClassFromRight(cls.id);
+                              if (cls?.id) handleSelectClassFromRight(cls.id, s.subjectId, s.teacherId);
                             }}
                             className="font-bold text-indigo-900 hover:text-indigo-600 hover:underline cursor-pointer"
                             title={`Xem thời khóa biểu lớp ${cls?.name}`}
@@ -3404,6 +3521,102 @@ export const ClassScheduleDistributor: React.FC<Props> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{confirmDialog.confirmLabel || 'Xác nhận xóa'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. MODAL BÁO CÁO & NHẮC NHỞ TỰ ĐỘNG XẾP TKB (BẢO TOÀN TIẾT XẾP TAY)       */}
+      {/* ========================================================================= */}
+      {autoScheduleReportModal && autoScheduleReportModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-amber-300 max-w-2xl w-full p-6 shadow-2xl space-y-4 my-8 max-h-[90vh] flex flex-col">
+            <div className="flex items-start gap-3.5 pb-3 border-b border-slate-200 shrink-0">
+              <div className="p-3 rounded-2xl bg-amber-100 text-amber-800 shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-amber-700">
+                  Báo Cáo Tự Động Xếp Bổ Sung
+                </div>
+                <h4 className="font-black text-base text-slate-950 leading-snug mt-0.5">
+                  Kết Quả Tự Động Xếp: {autoScheduleReportModal.targetName}
+                </h4>
+                <p className="text-xs text-slate-600 mt-1">
+                  Đã bảo toàn 100% các tiết đã xếp tay và tự động điền {autoScheduleReportModal.newlyPlacedCount} tiết vào các ô trống.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoScheduleReportModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar text-xs">
+              <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-200 text-amber-900 leading-relaxed font-semibold">
+                ⚠️ Có <strong>{autoScheduleReportModal.reminders.length}</strong> môn học chưa thể xếp đủ tiết do các ô trống còn lại của lớp bị vướng lịch với các tiết đã xếp tay của giáo viên hoặc lịch bận cá nhân:
+              </div>
+
+              {autoScheduleReportModal.reminders.map((rem, idx) => (
+                <div
+                  key={`${rem.assignmentId}_${idx}`}
+                  className="p-4 rounded-2xl border-2 border-slate-200 bg-slate-50/70 space-y-2.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-black text-sm text-slate-900 flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-lg bg-indigo-100 text-indigo-900 text-xs font-black">
+                        {rem.className}
+                      </span>
+                      <span>-</span>
+                      <span className="text-rose-700">{rem.subjectName}</span>
+                      <span>({rem.teacherName})</span>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-black text-[11px] border border-rose-300">
+                      Chưa xếp: {rem.missingPeriods} tiết
+                    </span>
+                  </div>
+
+                  {/* Lý do vướng */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5">
+                    <div className="font-black text-slate-700 flex items-center gap-1.5 text-[11px] uppercase">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span>Chi tiết lý do vướng tại các ô trống của lớp:</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 text-slate-700 font-medium text-xs pl-1">
+                      {rem.reasons.map((r, rIdx) => (
+                        <li key={rIdx} className="leading-snug">{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Khuyến nghị khắc phục */}
+                  <div className="bg-emerald-50/80 p-3 rounded-xl border border-emerald-200 space-y-1 text-emerald-950">
+                    <div className="font-black flex items-center gap-1.5 text-[11px] uppercase text-emerald-800">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Gợi ý & Hướng khắc phục:</span>
+                    </div>
+                    {rem.recommendations.map((rec, rcIdx) => (
+                      <p key={rcIdx} className="text-xs font-semibold leading-relaxed">
+                        {rec}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 shrink-0">
+              <button
+                type="button"
+                onClick={() => setAutoScheduleReportModal(null)}
+                className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md cursor-pointer transition-colors"
+              >
+                ĐÃ HIỂU & QUAY LẠI LƯỚI TKB
               </button>
             </div>
           </div>

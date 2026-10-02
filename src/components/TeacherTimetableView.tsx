@@ -304,9 +304,9 @@ export const TeacherTimetableView: React.FC<Props> = ({
   const handleAutoScheduleActiveTeacher = async () => {
     if (!activeTeacher) return;
 
-    // Chạy thuật toán xếp tự động cho phân công của GV này
+    // Chạy thuật toán xếp tự động cho phân công của GV này (Bảo toàn các tiết đã xếp tay)
     const solver = new TimetableSolver(assignments, teachers, classes, rooms, subjects);
-    const result = solver.solve();
+    const result = solver.solve(slots);
 
     if (result.slots.length > 0) {
       onSlotsUpdated?.(result.slots);

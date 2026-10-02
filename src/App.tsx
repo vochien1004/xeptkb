@@ -222,9 +222,28 @@ export default function App() {
   // Tự động tải dữ liệu từ Firebase Firestore Sub-collection khi mở ứng dụng hoặc đổi trường
   useEffect(() => {
     if (currentSchool?.schoolId) {
+      // Khi đổi trường hoặc đăng nhập trường mới, lập tức xóa sạch state cũ tránh rò rỉ dữ liệu
+      setTeachers([]);
+      setClasses([]);
+      setRooms([]);
+      setSubjects([]);
+      setAssignments([]);
+      setSlots([]);
+      setSolverResult(null);
+      setExportConfig(undefined);
       loadCloudData(currentSchool.schoolId);
     } else {
-      loadCloudData();
+      // Khi không có trường (đã đăng xuất hoặc chưa đăng nhập), xóa sạch toàn bộ state
+      setTeachers([]);
+      setClasses([]);
+      setRooms([]);
+      setSubjects([]);
+      setAssignments([]);
+      setSlots([]);
+      setSolverResult(null);
+      setExportConfig(undefined);
+      setIsCloudLoading(false);
+      setIsCloudSynced(false);
     }
   }, [currentSchool?.schoolId]);
 
@@ -232,8 +251,19 @@ export default function App() {
    * Tải toàn bộ dữ liệu từ Cloud Firestore Sub-collection của trường
    */
   const loadCloudData = async (targetSchoolId?: string) => {
-    setIsCloudLoading(true);
     const sid = targetSchoolId || currentSchool?.schoolId;
+    if (!sid) {
+      setTeachers([]);
+      setClasses([]);
+      setRooms([]);
+      setSubjects([]);
+      setAssignments([]);
+      setSlots([]);
+      setIsCloudLoading(false);
+      return;
+    }
+
+    setIsCloudLoading(true);
     try {
       const cloudData = await fetchAllDataFromFirebase(sid);
       setTeachers(cloudData.teachers);
@@ -241,15 +271,51 @@ export default function App() {
       setSubjects(cloudData.subjects);
       setRooms(cloudData.rooms.length > 0 ? cloudData.rooms : []);
       setAssignments(cloudData.assignments);
-      setSlots(cloudData.slots);
       setIsCloudSynced(cloudData.isCloudLoaded);
       if (cloudData.exportConfig) {
         setExportConfig(cloudData.exportConfig);
       }
 
-      // Bảo toàn Thời Khóa Biểu đang xếp dở của các lớp:
-      if (cloudData.slots && cloudData.slots.length > 0) {
-        setSlots(cloudData.slots);
+      // Lọc và làm sạch các slots để loại bỏ triệt để các môn không có trong PCGD của lớp
+      const validClassIds = new Set(cloudData.classes.map((c) => c.id));
+      const classSubjectMap = new Map<string, Set<string>>();
+      cloudData.assignments.forEach((a) => {
+        if (Array.isArray(a.classIds)) {
+          a.classIds.forEach((cId) => {
+            if (!classSubjectMap.has(cId)) classSubjectMap.set(cId, new Set());
+            classSubjectMap.get(cId)!.add(a.subjectId);
+          });
+        }
+        if ((a as any).classId) {
+          const cId = (a as any).classId;
+          if (!classSubjectMap.has(cId)) classSubjectMap.set(cId, new Set());
+          classSubjectMap.get(cId)!.add(a.subjectId);
+        }
+      });
+
+      const cleanSlots = (cloudData.slots || []).filter((slot) => {
+        if (!validClassIds.has(slot.classId)) return false;
+        if (
+          slot.subjectId === 'SUB_OFF' ||
+          slot.subjectId === 'SUB_CC' ||
+          slot.subjectId === 'SUB_SHL' ||
+          slot.assignmentId?.startsWith('ASG_CC_') ||
+          slot.assignmentId?.startsWith('ASG_SHL_')
+        ) {
+          return true;
+        }
+        const sub = cloudData.subjects.find((s) => s.id === slot.subjectId);
+        if (sub?.code === 'CC' || sub?.code === 'SHL') return true;
+        const allowed = classSubjectMap.get(slot.classId);
+        return allowed ? allowed.has(slot.subjectId) : false;
+      });
+
+      // Bảo toàn Thời Khóa Biểu hợp lệ đang xếp dở của các lớp:
+      if (cleanSlots.length > 0) {
+        setSlots(cleanSlots);
+        if (cleanSlots.length !== (cloudData.slots || []).length) {
+          saveTimetableSlotsToFirebase(cleanSlots, 'HK1_2026_2027', sid).catch(() => {});
+        }
       } else if (
         cloudData.assignments.length > 0 &&
         cloudData.teachers.length > 0 &&
@@ -269,6 +335,8 @@ export default function App() {
         if (result.slots.length > 0) {
           saveTimetableSlotsToFirebase(result.slots, 'HK1_2026_2027', sid);
         }
+      } else {
+        setSlots([]);
       }
     } catch (err: any) {
       console.error(`Lỗi khi tải dữ liệu Firebase trường [${sid}]:`, err);
@@ -302,7 +370,7 @@ export default function App() {
         rooms,
         subjects
       );
-      const result = solver.solve();
+      const result = solver.solve(slots);
 
       setSlots(result.slots);
       setSolverResult(result);
@@ -1040,7 +1108,7 @@ export default function App() {
         )}
 
         {/* VÙNG CHỨA CÁC TAB NỘI DUNG */}
-        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+        <div className="p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6">
           {/* TAB SUPER ADMIN: QUẢN LÝ CẤP PHÉP TRƯỜNG HỌC */}
           {activeTab === 'SUPER_ADMIN' && currentUser?.role === 'super_admin' && (
             <SuperAdminDashboard

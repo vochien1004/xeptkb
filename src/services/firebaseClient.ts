@@ -26,6 +26,8 @@ import {
   collection,
   getDocs,
   getDoc,
+  getDocsFromServer,
+  getDocFromServer,
   doc,
   setDoc,
   deleteDoc,
@@ -105,6 +107,59 @@ export const COLLECTIONS = {
 };
 
 /**
+ * Dọn dẹp triệt để toàn bộ bộ nhớ cục bộ localStorage liên quan đến dữ liệu trường học
+ * để không bao giờ bị lưu vết / rò rỉ dữ liệu sang tài khoản khác khi đăng xuất hoặc đổi trường
+ */
+export function clearSchoolLocalCache(specificSchoolId?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (
+        key.startsWith('cached_school_full_data_') ||
+        key.startsWith('inprogress_timetable_slots_') ||
+        key.startsWith('inprogress_timetable_slots_time_') ||
+        key.startsWith('cached_export_config_') ||
+        key.startsWith('cached_renewal_requests_') ||
+        key === 'cached_schools_list' ||
+        key === 'cached_all_renewal_requests' ||
+        key.startsWith('cached_') ||
+        key.startsWith('inprogress_') ||
+        key.startsWith('tkb_draft_') ||
+        key.startsWith('tkb_slots_')
+      ) {
+        if (!specificSchoolId || key.includes(specificSchoolId)) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+    // Dọn dẹp cả trong sessionStorage nếu có
+    const sessionKeysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key) continue;
+      if (
+        key.startsWith('cached_') ||
+        key.startsWith('inprogress_') ||
+        key.startsWith('tkb_draft_') ||
+        key.startsWith('tkb_slots_')
+      ) {
+        if (!specificSchoolId || key.includes(specificSchoolId)) {
+          sessionKeysToRemove.push(key);
+        }
+      }
+    }
+    sessionKeysToRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch (e) {
+    console.warn('Lỗi dọn dẹp cache local storage:', e);
+  }
+}
+
+/**
  * Lấy schoolId hiện tại từ tham số truyền vào hoặc từ LocalStorage session
  */
 export function getActiveSchoolId(explicitSchoolId?: string): string {
@@ -130,7 +185,7 @@ export function getActiveSchoolId(explicitSchoolId?: string): string {
       // ignore
     }
   }
-  return DEFAULT_SCHOOL_ID;
+  return '';
 }
 
 /**
@@ -228,6 +283,10 @@ export function getDefaultSchoolData(sid: string): CloudDataPayload {
 
 export async function fetchAllDataFromFirebase(schoolId?: string): Promise<CloudDataPayload> {
   const sid = getActiveSchoolId(schoolId);
+  if (!sid || sid.trim() === '') {
+    return getDefaultSchoolData('');
+  }
+
   try {
     const teachersCol = getSchoolSubcollectionRef(COLLECTIONS.TEACHERS, sid);
     const classesCol = getSchoolSubcollectionRef(COLLECTIONS.CLASSES, sid);
@@ -237,15 +296,21 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
     const slotsCol = getSchoolSubcollectionRef(COLLECTIONS.TIMETABLES, sid);
     const settingsDoc = getSchoolSubDocRef(COLLECTIONS.SETTINGS, 'export_config', sid);
 
+    // Ưu tiên đọc trực tiếp từ Server để vượt qua bộ nhớ đệm Firestore cũ (Persistence Cache)
+    const fetchCol = (colRef: any) =>
+      getDocsFromServer(colRef).catch(() => getDocs(colRef).catch(() => null));
+    const fetchSingleDoc = (docRef: any) =>
+      getDocFromServer(docRef).catch(() => getDoc(docRef).catch(() => null));
+
     const [teachersSnap, classesSnap, subjectsSnap, roomsSnap, asgSnap, slotsSnap, settingsSnap] =
       await Promise.all([
-        getDocs(teachersCol).catch(() => null),
-        getDocs(classesCol).catch(() => null),
-        getDocs(subjectsCol).catch(() => null),
-        getDocs(roomsCol).catch(() => null),
-        getDocs(asgCol).catch(() => null),
-        getDocs(slotsCol).catch(() => null),
-        getDoc(settingsDoc).catch(() => null),
+        fetchCol(teachersCol),
+        fetchCol(classesCol),
+        fetchCol(subjectsCol),
+        fetchCol(roomsCol),
+        fetchCol(asgCol),
+        fetchCol(slotsCol),
+        fetchSingleDoc(settingsDoc),
       ]);
 
     const isDummyRecord = (id: string, data: any) => {
@@ -260,7 +325,7 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
     const teachers: Teacher[] = [];
     if (teachersSnap && !teachersSnap.empty) {
       teachersSnap.docs.forEach((d) => {
-        const data = d.data();
+        const data = d.data() as Record<string, any>;
         if (isDummyRecord(d.id, data)) {
           deleteDoc(d.ref).catch(() => {});
         } else {
@@ -272,7 +337,7 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
     const classes: SchoolClass[] = [];
     if (classesSnap && !classesSnap.empty) {
       classesSnap.docs.forEach((d) => {
-        const data = d.data();
+        const data = d.data() as Record<string, any>;
         if (isDummyRecord(d.id, data)) {
           deleteDoc(d.ref).catch(() => {});
         } else {
@@ -284,7 +349,7 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
     const subjects: Subject[] = [];
     if (subjectsSnap && !subjectsSnap.empty) {
       subjectsSnap.docs.forEach((d) => {
-        const data = d.data();
+        const data = d.data() as Record<string, any>;
         if (isDummyRecord(d.id, data)) {
           deleteDoc(d.ref).catch(() => {});
         } else {
@@ -296,7 +361,7 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
     const rooms: Room[] = [];
     if (roomsSnap && !roomsSnap.empty) {
       roomsSnap.docs.forEach((d) => {
-        const data = d.data();
+        const data = d.data() as Record<string, any>;
         if (isDummyRecord(d.id, data)) {
           deleteDoc(d.ref).catch(() => {});
         } else {
@@ -308,7 +373,7 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
     const assignments: TeachingAssignment[] = [];
     if (asgSnap && !asgSnap.empty) {
       asgSnap.docs.forEach((d) => {
-        const data = d.data();
+        const data = d.data() as Record<string, any>;
         if (isDummyRecord(d.id, data)) {
           deleteDoc(d.ref).catch(() => {});
         } else {
@@ -320,7 +385,7 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
     let slots: TimetableSlot[] = [];
     if (slotsSnap && !slotsSnap.empty) {
       slotsSnap.docs.forEach((d) => {
-        const data = d.data();
+        const data = d.data() as Record<string, any>;
         if (isDummyRecord(d.id, data)) {
           deleteDoc(d.ref).catch(() => {});
         } else {
@@ -331,7 +396,7 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
 
     let exportConfig: ExportConfig | undefined;
     if (settingsSnap && settingsSnap.exists()) {
-      const data = settingsSnap.data();
+      const data = settingsSnap.data() as Record<string, any>;
       exportConfig = {
         schoolName: data.schoolName || 'TRƯỜNG THPT',
         semesterYear: data.semesterYear || 'HỌC KỲ I - NĂM HỌC: 2026-2027',
@@ -352,16 +417,62 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
       }
     }
 
-    // Nếu trên Firestore chưa có slots nhưng local storage có bản nháp của trường này
+    // =========================================================================
+    // LÀM SẠCH VÀ LOẠI BỎ TRIỆT ĐỂ CÁC TIẾT LẠC / MÔN KHÔNG CÓ TRONG PCGD CỦA LỚP
+    // =========================================================================
+    const validClassIds = new Set(classes.map((c) => c.id));
+    const classSubjectMap = new Map<string, Set<string>>();
+    assignments.forEach((a) => {
+      if (Array.isArray(a.classIds)) {
+        a.classIds.forEach((cId) => {
+          if (!classSubjectMap.has(cId)) classSubjectMap.set(cId, new Set());
+          classSubjectMap.get(cId)!.add(a.subjectId);
+        });
+      }
+      if ((a as any).classId) {
+        const cId = (a as any).classId;
+        if (!classSubjectMap.has(cId)) classSubjectMap.set(cId, new Set());
+        classSubjectMap.get(cId)!.add(a.subjectId);
+      }
+    });
+
+    // Nếu trên Firestore chưa có slots, chỉ lấy từ local storage nếu các slot đó thuộc đúng lớp và PCGD của trường này
     if (slots.length === 0 && typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem(`inprogress_timetable_slots_${sid}`);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            slots = parsed;
-            // Tự động đẩy bản nháp này lên Firestore subcollection
-            saveTimetableSlotsToFirebase(parsed, 'HK1_2026_2027', sid).catch(() => {});
+            const validDraftSlots = parsed.filter((s) => {
+              const cId = s.classId;
+              const hasValidClass =
+                validClassIds.has(cId) ||
+                (Array.isArray(s.classIds) && s.classIds.some((id: string) => validClassIds.has(id)));
+              if (!hasValidClass) return false;
+
+              if (
+                s.subjectId === 'SUB_CC' ||
+                s.subjectId === 'SUB_OFF' ||
+                s.subjectId === 'SUB_SHL' ||
+                s.assignmentId?.startsWith('ASG_CC_') ||
+                s.assignmentId?.startsWith('ASG_SHL_')
+              ) {
+                return true;
+              }
+              const sub = subjects.find((subj) => subj.id === s.subjectId);
+              if (sub?.code === 'CC' || sub?.code === 'SHL') return true;
+
+              const allowed = classSubjectMap.get(cId);
+              return allowed ? allowed.has(s.subjectId) : false;
+            });
+
+            if (validDraftSlots.length > 0) {
+              slots = validDraftSlots;
+              saveTimetableSlotsToFirebase(validDraftSlots, 'HK1_2026_2027', sid).catch(() => {});
+            } else {
+              // Bản nháp không khớp lớp hoặc PCGD của trường -> xóa bỏ tránh ô nhiễm dữ liệu
+              localStorage.removeItem(`inprogress_timetable_slots_${sid}`);
+            }
           }
         }
       } catch (e) {
@@ -369,7 +480,41 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
       }
     }
 
+    const sanitizedSlots = slots.filter((slot) => {
+      const cId = slot.classId;
+      const hasValidClass =
+        validClassIds.has(cId) ||
+        (Array.isArray(slot.classIds) && slot.classIds.some((id) => validClassIds.has(id)));
+      if (!hasValidClass) return false;
 
+      // Tiết Chào cờ, Sinh hoạt, Nghỉ luôn hợp lệ
+      if (
+        slot.subjectId === 'SUB_CC' ||
+        slot.subjectId === 'SUB_OFF' ||
+        slot.subjectId === 'SUB_SHL' ||
+        slot.assignmentId?.startsWith('ASG_CC_') ||
+        slot.assignmentId?.startsWith('ASG_SHL_')
+      ) {
+        return true;
+      }
+      const sub = subjects.find((subj) => subj.id === slot.subjectId);
+      if (sub?.code === 'CC' || sub?.code === 'SHL') return true;
+
+      // Môn học phải có trong phân công giảng dạy của lớp này
+      const allowedSubjects = classSubjectMap.get(cId);
+      if (!allowedSubjects || !allowedSubjects.has(slot.subjectId)) {
+        return false; // Môn không có trong PCGD của lớp -> loại bỏ ngay!
+      }
+
+      return true;
+    });
+
+    if (sanitizedSlots.length < slots.length) {
+      // Tự động dọn dẹp các slots lạc trên Firestore
+      saveTimetableSlotsToFirebase(sanitizedSlots, 'HK1_2026_2027', sid).catch(() => {});
+    }
+
+    slots = sanitizedSlots;
 
     const payload: CloudDataPayload = {
       teachers,
@@ -394,11 +539,14 @@ export async function fetchAllDataFromFirebase(schoolId?: string): Promise<Cloud
       try {
         const cachedRaw = localStorage.getItem(`cached_school_full_data_${sid}`);
         if (cachedRaw) {
-          return {
-            ...JSON.parse(cachedRaw),
-            isCloudLoaded: true,
-            schoolId: sid,
-          };
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed && parsed.schoolId === sid) {
+            return {
+              ...parsed,
+              isCloudLoaded: true,
+              schoolId: sid,
+            };
+          }
         }
       } catch (e) {
         // ignore

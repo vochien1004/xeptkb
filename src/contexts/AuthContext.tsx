@@ -22,6 +22,7 @@ import {
 import {
   getSchoolRef as getSchoolRefHelper,
   getActiveSchoolId,
+  clearSchoolLocalCache,
 } from '../services/firebaseClient';
 import { DocumentReference } from 'firebase/firestore';
 
@@ -221,6 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await loginWithFirebaseAuth(credentials);
       if (result.success && result.user) {
+        clearSchoolLocalCache();
         setUser(result.user);
         sessionStorage.setItem('tkb_explicitly_logged_in', 'true');
         sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(result.user));
@@ -322,12 +324,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionStorage.removeItem(SCHOOL_STORAGE_KEY);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(SCHOOL_STORAGE_KEY);
+    clearSchoolLocalCache();
     signOut(auth).catch(() => {});
   };
 
   // Chuyển nhanh tài khoản demo (dành cho kiểm thử)
   const switchDemoUser = async (targetUser: UserProfile, targetSchool?: School): Promise<boolean> => {
     setIsLoading(true);
+    clearSchoolLocalCache();
     
     // Tự động kiểm tra / khởi tạo document /users/{uid}
     await ensureAndSyncUserDocument(

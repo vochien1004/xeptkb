@@ -537,13 +537,13 @@ export const ExportTimetableView: React.FC<Props> = ({
       {/* KHU VỰC HIỂN THỊ XEM TRƯỚC VÀ IN ẤN */}
       <div
         ref={printAreaRef}
-        className="bg-white rounded-2xl border-2 border-slate-300 shadow-md p-6 sm:p-8 overflow-x-auto print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none"
+        className="bg-white rounded-2xl border-2 border-slate-300 shadow-md p-3 sm:p-5 md:p-6 overflow-x-auto max-w-full custom-scrollbar print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none"
       >
         {/* ========================================================================= */}
         {/* CHẾ ĐỘ 1: XEM TKB TOÀN TRƯỜNG (SHEET 1) */}
         {/* ========================================================================= */}
         {viewMode === 'SCHOOL' && (
-          <div className="space-y-10" style={{ minWidth: '1050px' }}>
+          <div className="space-y-8 w-full min-w-[800px] sm:min-w-[950px] md:min-w-[1050px]">
             {/* BẢNG BUỔI SÁNG */}
             {(schoolShiftFilter === 'BOTH' || schoolShiftFilter === 'MORNING') && (
               <div className="space-y-3">

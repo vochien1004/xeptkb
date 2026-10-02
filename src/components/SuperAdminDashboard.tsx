@@ -805,31 +805,31 @@ export const SuperAdminDashboard: React.FC<Props> = ({
       )}
 
       {/* HEADER BANNER SUPER ADMIN */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-indigo-900/50 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 text-white shadow-xl border border-indigo-900/50 relative overflow-hidden transition-all">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-black tracking-wide uppercase">
-              <Shield className="w-3.5 h-3.5 text-amber-400" />
+        <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-4 lg:gap-6">
+          <div className="space-y-1.5 sm:space-y-2 max-w-3xl">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-[11px] sm:text-xs font-black tracking-wide uppercase">
+              <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>Cổng Quản Trị Hệ Thống Toàn Quyền (Super Admin)</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
-              <Building2 className="w-8 h-8 text-indigo-400 shrink-0" />
-              <span>Quản Lý Trường Học & Cấp Phép Bản Quyền</span>
+            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black tracking-tight text-white flex items-center gap-2.5 sm:gap-3 flex-wrap">
+              <Building2 className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-indigo-400 shrink-0" />
+              <span className="leading-tight break-words">Quản Lý Trường Học & Cấp Phép Bản Quyền</span>
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
               Trung tâm cấp mã <code className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-amber-300">schoolId</code> tự động, duyệt trường mới đăng ký, phân quyền tài khoản School Admin và kiểm soát trạng thái kích hoạt/khóa dịch vụ.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
             {/* Nút Tạo Trường Mới */}
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="px-5 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white font-black text-xs sm:text-sm shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 flex items-center gap-2.5 transition-all cursor-pointer transform hover:-translate-y-0.5"
+              className="px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl bg-gradient-to-r from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white font-black text-xs sm:text-sm shadow-md shadow-indigo-600/30 flex items-center gap-2 transition-all cursor-pointer transform hover:-translate-y-0.5"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
               <span>Tạo Trường Mới / Cấp Tài Khoản</span>
             </button>
 
@@ -840,10 +840,10 @@ export const SuperAdminDashboard: React.FC<Props> = ({
                   const targetSchool = schools.find((s) => s.schoolId === currentSchoolId) || schools[0];
                   onSelectSchool(targetSchool);
                 }}
-                className="px-4 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 flex items-center gap-2 transition-all cursor-pointer"
+                className="px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 flex items-center gap-2 transition-all cursor-pointer"
                 title="Chuyển sang giao diện xem & xếp TKB"
               >
-                <LayoutGrid className="w-4 h-4 text-indigo-300" />
+                <LayoutGrid className="w-4 h-4 text-indigo-300 shrink-0" />
                 <span>Chuyển sang Giao diện TKB</span>
               </button>
             )}
@@ -851,10 +851,10 @@ export const SuperAdminDashboard: React.FC<Props> = ({
             {/* Nút Đăng xuất */}
             <button
               onClick={logout}
-              className="px-4 py-3.5 rounded-2xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-200 font-bold text-xs sm:text-sm border border-rose-500/30 flex items-center gap-2 transition-all cursor-pointer"
+              className="px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-200 font-bold text-xs sm:text-sm border border-rose-500/30 flex items-center gap-2 transition-all cursor-pointer"
               title="Đăng xuất khỏi tài khoản Super Admin"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-4 h-4 shrink-0" />
               <span>Đăng Xuất</span>
             </button>
           </div>
