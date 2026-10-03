@@ -53,6 +53,142 @@ import {
   fetchExportConfigFromFirebase,
 } from '../services/firebaseClient';
 
+interface ClassSlotDetail {
+  subject: string;
+  teacher?: string;
+  isCC: boolean;
+  isOff: boolean;
+}
+
+export const getClassSlotDetails = (
+  slots: TimetableSlot[],
+  subjectsMap: Map<string, Subject>,
+  teachersMap: Map<string, string>,
+  classes: SchoolClass[],
+  day: DayOfWeek,
+  period: PeriodOfDay,
+  classId: string,
+  session: 'MORNING' | 'AFTERNOON'
+): ClassSlotDetail => {
+  const matchedSlot = slots.find((s) => {
+    if (s.day !== day) return false;
+    const matchClass = s.classId === classId || (s.classIds && s.classIds.includes(classId));
+    if (!matchClass) return false;
+    const sSess = s.session || (s.period <= 5 ? 'MORNING' : 'AFTERNOON');
+    const sPeriod = s.session ? s.period : s.period <= 5 ? s.period : s.period - 5;
+    return sSess === session && sPeriod === period;
+  });
+
+  if (!matchedSlot) {
+    return { subject: '', isCC: false, isOff: false };
+  }
+
+  if (matchedSlot.subjectId === 'SUB_OFF') {
+    return { subject: 'Nghỉ', isCC: false, isOff: true };
+  }
+
+  const subObj = subjectsMap.get(matchedSlot.subjectId);
+  const isCC =
+    matchedSlot.subjectId === 'SUB_CC' ||
+    subObj?.code === 'CC' ||
+    subObj?.name.toLowerCase().includes('chào cờ');
+
+  if (isCC) return { subject: 'Chào cờ', isCC: true, isOff: false };
+
+  const isShl =
+    matchedSlot.subjectId === 'SUB_SHL' ||
+    subObj?.code === 'SHL' ||
+    subObj?.name.toLowerCase().includes('sinh hoạt');
+
+  const subjectName = isShl
+    ? 'Sinh hoạt'
+    : subObj?.shortName || subObj?.name || matchedSlot.subjectId;
+
+  let teacherNames = (
+    matchedSlot.teacherIds && matchedSlot.teacherIds.length > 0
+      ? matchedSlot.teacherIds
+      : [matchedSlot.teacherId]
+  )
+    .filter(Boolean)
+    .map((tid) => {
+      const t = teachersMap.get(tid);
+      if (!t) return tid;
+      const parts = t.replace('Thầy ', '').replace('Cô ', '').trim().split(' ');
+      return parts[parts.length - 1];
+    })
+    .filter(Boolean)
+    .join(' + ');
+
+  if (isShl && (!teacherNames || teacherNames.trim() === '')) {
+    const clsObj = classes.find(
+      (c) => c.id === classId || c.name.replace('Lớp ', '') === classId || c.name === classId
+    );
+    if (clsObj?.homeroomTeacherId) {
+      const t = teachersMap.get(clsObj.homeroomTeacherId);
+      if (t) {
+        const parts = t.replace('Thầy ', '').replace('Cô ', '').trim().split(' ');
+        teacherNames = parts[parts.length - 1];
+      }
+    }
+  }
+
+  return {
+    subject: subjectName,
+    teacher: teacherNames || undefined,
+    isCC: false,
+    isOff: false,
+  };
+};
+
+export const getTeacherSlotDetails = (
+  slots: TimetableSlot[],
+  subjectsMap: Map<string, Subject>,
+  classesMap: Map<string, SchoolClass>,
+  teacherId: string,
+  day: DayOfWeek,
+  period: PeriodOfDay,
+  session: 'MORNING' | 'AFTERNOON'
+): { className: string; subjectName: string } => {
+  const matchedSlot = slots.find((s) => {
+    if (s.day !== day) return false;
+    const matchTeacher =
+      s.teacherId === teacherId || (s.teacherIds && s.teacherIds.includes(teacherId));
+    if (!matchTeacher) return false;
+    const sSess = s.session || (s.period <= 5 ? 'MORNING' : 'AFTERNOON');
+    const sPeriod = s.session ? s.period : s.period <= 5 ? s.period : s.period - 5;
+    return sSess === session && sPeriod === period;
+  });
+
+  if (!matchedSlot) {
+    return { className: '', subjectName: '' };
+  }
+
+  const subObj = subjectsMap.get(matchedSlot.subjectId);
+  const isShl =
+    matchedSlot.subjectId === 'SUB_SHL' ||
+    subObj?.code === 'SHL' ||
+    subObj?.name.toLowerCase().includes('sinh hoạt');
+
+  const subjectName = isShl
+    ? 'Sinh hoạt'
+    : subObj?.shortName || subObj?.name || matchedSlot.subjectId;
+
+  let className = '';
+  if (matchedSlot.classIds && matchedSlot.classIds.length > 0) {
+    className = matchedSlot.classIds
+      .map((cid) => {
+        const c = classesMap.get(cid);
+        return c ? c.name.replace('Lớp ', '') : cid;
+      })
+      .join(', ');
+  } else if (matchedSlot.classId) {
+    const c = classesMap.get(matchedSlot.classId);
+    className = c ? c.name.replace('Lớp ', '') : matchedSlot.classId;
+  }
+
+  return { className, subjectName };
+};
+
 interface Props {
   slots: TimetableSlot[];
   classes: SchoolClass[];
@@ -537,13 +673,13 @@ export const ExportTimetableView: React.FC<Props> = ({
       {/* KHU VỰC HIỂN THỊ XEM TRƯỚC VÀ IN ẤN */}
       <div
         ref={printAreaRef}
-        className="bg-white rounded-2xl border-2 border-slate-300 shadow-md p-2 sm:p-4 md:p-6 w-full max-w-full overflow-hidden print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none"
+        className="bg-white rounded-2xl border-2 border-slate-300 shadow-md p-3 sm:p-5 md:p-6 w-full max-w-full print:p-0 print:border-none print:shadow-none print:m-0 print:rounded-none"
       >
         {/* ========================================================================= */}
         {/* CHẾ ĐỘ 1: XEM TKB TOÀN TRƯỜNG (SHEET 1) */}
         {/* ========================================================================= */}
         {viewMode === 'SCHOOL' && (
-          <div className="space-y-6 sm:space-y-8 w-full max-w-full overflow-hidden">
+          <div className="space-y-6 sm:space-y-8 w-full max-w-full">
             {/* BẢNG BUỔI SÁNG */}
             {(schoolShiftFilter === 'BOTH' || schoolShiftFilter === 'MORNING') && (
               <div className="space-y-3 w-full">
@@ -572,22 +708,25 @@ export const ExportTimetableView: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Bảng ma trận lớp Buổi Sáng */}
-                <div className="w-full overflow-hidden rounded-lg">
-                  <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-[10px] sm:text-[11px] md:text-xs leading-tight">
+                {/* Bảng ma trận lớp Buổi Sáng có thanh cuộn ngang & Sticky Header */}
+                <div className="w-full overflow-x-auto custom-scrollbar shadow-inner rounded-xl border-2 border-slate-900 print:overflow-visible print:shadow-none print:rounded-none">
+                  <table className="w-full table-auto print:table-fixed border-collapse text-center text-xs leading-tight">
                     <thead>
-                      <tr className="border-b-2 border-slate-900">
+                      <tr className="border-b-2 border-slate-900 bg-sky-300">
                         <th
-                          rowSpan={1}
-                          colSpan={2}
-                          className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 sm:px-2 py-1.5 sm:py-2 text-[10px] sm:text-xs w-16 sm:w-20 md:w-24"
+                          className="sticky left-0 z-20 border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 py-2 text-xs w-12 sm:w-14 min-w-[48px] sm:min-w-[56px] print:static"
                         >
-                          Lớp / Tiết
+                          Thứ
+                        </th>
+                        <th
+                          className="sticky left-12 sm:left-14 z-20 border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 py-2 text-xs w-8 sm:w-10 min-w-[32px] sm:min-w-[40px] print:static"
+                        >
+                          Tiết
                         </th>
                         {targetClasses.map((cls) => (
                           <th
                             key={cls.id}
-                            className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-0.5 sm:px-1 py-1.5 sm:py-2 text-[10px] sm:text-xs uppercase truncate"
+                            className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-2 py-2 text-xs uppercase min-w-[110px] sm:min-w-[120px] print:min-w-0 print:px-0.5 print:py-1 print:text-[9px]"
                             title={cls.name}
                           >
                             {cls.name}
@@ -602,25 +741,25 @@ export const ExportTimetableView: React.FC<Props> = ({
                           return (
                             <tr
                               key={`morning_${day}_${period}`}
-                              className={`border-b border-slate-900 hover:bg-slate-50 ${
+                              className={`border-b border-slate-900 hover:bg-slate-50/80 ${
                                 period === 5 ? 'border-b-4 border-slate-900' : ''
                               }`}
                             >
                               {isFirst && (
                                 <td
                                   rowSpan={5}
-                                  className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black p-0.5 sm:p-1 text-center align-middle w-10 sm:w-12 md:w-14"
+                                  className="sticky left-0 z-10 border-r-2 border-slate-900 bg-sky-100 text-slate-950 font-black p-1 text-center align-middle w-12 sm:w-14 min-w-[48px] sm:min-w-[56px] print:static print:bg-sky-300"
                                 >
-                                  <div className="font-black text-[10px] sm:text-xs uppercase tracking-wider py-1 sm:py-2">
+                                  <div className="font-black text-xs sm:text-sm uppercase tracking-wider py-1">
                                     {label}
                                   </div>
                                 </td>
                               )}
-                              <td className="border-r-2 border-slate-900 font-black text-[10px] sm:text-xs text-slate-950 bg-slate-100 p-0.5 sm:p-1 w-6 sm:w-8 md:w-10">
+                              <td className="sticky left-12 sm:left-14 z-10 border-r-2 border-slate-900 font-black text-xs text-slate-950 bg-white p-1 w-8 sm:w-10 min-w-[32px] sm:min-w-[40px] print:static print:bg-slate-100">
                                 {period}
                               </td>
                               {targetClasses.map((cls) => {
-                                const content = getCellContentForClass(
+                                const cellData = getClassSlotDetails(
                                   slots,
                                   subjectsMap,
                                   teachersMap,
@@ -630,20 +769,39 @@ export const ExportTimetableView: React.FC<Props> = ({
                                   cls.id,
                                   'MORNING'
                                 );
-                                const isCC = content === 'Chào cờ';
                                 return (
                                   <td
                                     key={cls.id}
-                                    title={content || ''}
-                                    className={`border-r border-slate-900 last:border-r-0 px-0.5 sm:px-1 py-1 sm:py-1.5 font-bold align-middle truncate ${
-                                      isCC
+                                    title={
+                                      cellData.teacher
+                                        ? `${cellData.subject} (${cellData.teacher})`
+                                        : cellData.subject
+                                    }
+                                    className={`border-r border-slate-900 last:border-r-0 px-2 py-2 min-w-[110px] sm:min-w-[120px] print:min-w-0 print:px-0.5 print:py-0.5 align-middle ${
+                                      cellData.isCC
                                         ? 'bg-amber-100 text-amber-950 font-black'
-                                        : content
-                                        ? 'text-slate-950'
-                                        : 'text-slate-300'
+                                        : cellData.subject
+                                        ? 'text-slate-950 bg-white'
+                                        : 'text-slate-300 bg-white'
                                     }`}
                                   >
-                                    {content || '-'}
+                                    {cellData.subject ? (
+                                      <div className="py-0.5 px-0.5 print:py-0">
+                                        <span
+                                          className={`font-semibold text-xs sm:text-[13px] print:text-[9px] leading-tight ${
+                                            cellData.isCC
+                                              ? 'font-black text-amber-950'
+                                              : 'text-slate-950'
+                                          }`}
+                                        >
+                                          {cellData.teacher
+                                            ? `${cellData.subject} - ${cellData.teacher}`
+                                            : cellData.subject}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300 font-bold">-</span>
+                                    )}
                                   </td>
                                 );
                               })}
@@ -685,22 +843,25 @@ export const ExportTimetableView: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Bảng ma trận lớp Buổi Chiều */}
-                <div className="w-full overflow-hidden rounded-lg">
-                  <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-[10px] sm:text-[11px] md:text-xs leading-tight">
+                {/* Bảng ma trận lớp Buổi Chiều có thanh cuộn ngang & Sticky Header */}
+                <div className="w-full overflow-x-auto custom-scrollbar shadow-inner rounded-xl border-2 border-slate-900 print:overflow-visible print:shadow-none print:rounded-none">
+                  <table className="w-full table-auto print:table-fixed border-collapse text-center text-xs leading-tight">
                     <thead>
-                      <tr className="border-b-2 border-slate-900">
+                      <tr className="border-b-2 border-slate-900 bg-sky-300">
                         <th
-                          rowSpan={1}
-                          colSpan={2}
-                          className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 sm:px-2 py-1.5 sm:py-2 text-[10px] sm:text-xs w-16 sm:w-20 md:w-24"
+                          className="sticky left-0 z-20 border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 py-2 text-xs w-12 sm:w-14 min-w-[48px] sm:min-w-[56px] print:static"
                         >
-                          Lớp / Tiết
+                          Thứ
+                        </th>
+                        <th
+                          className="sticky left-12 sm:left-14 z-20 border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black px-1 py-2 text-xs w-8 sm:w-10 min-w-[32px] sm:min-w-[40px] print:static"
+                        >
+                          Tiết
                         </th>
                         {targetClasses.map((cls) => (
                           <th
                             key={cls.id}
-                            className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-0.5 sm:px-1 py-1.5 sm:py-2 text-[10px] sm:text-xs uppercase truncate"
+                            className="border-r border-slate-900 last:border-r-0 bg-sky-300 text-slate-950 font-black px-2 py-2 text-xs uppercase min-w-[110px] sm:min-w-[120px] print:min-w-0 print:px-0.5 print:py-1 print:text-[9px]"
                             title={cls.name}
                           >
                             {cls.name}
@@ -715,25 +876,25 @@ export const ExportTimetableView: React.FC<Props> = ({
                           return (
                             <tr
                               key={`afternoon_${day}_${period}`}
-                              className={`border-b border-slate-900 hover:bg-slate-50 ${
+                              className={`border-b border-slate-900 hover:bg-slate-50/80 ${
                                 period === 5 ? 'border-b-4 border-slate-900' : ''
                               }`}
                             >
                               {isFirst && (
                                 <td
                                   rowSpan={5}
-                                  className="border-r-2 border-slate-900 bg-sky-300 text-slate-950 font-black p-0.5 sm:p-1 text-center align-middle w-10 sm:w-12 md:w-14"
+                                  className="sticky left-0 z-10 border-r-2 border-slate-900 bg-sky-100 text-slate-950 font-black p-1 text-center align-middle w-12 sm:w-14 min-w-[48px] sm:min-w-[56px] print:static print:bg-sky-300"
                                 >
-                                  <div className="font-black text-[10px] sm:text-xs uppercase tracking-wider py-1 sm:py-2">
+                                  <div className="font-black text-xs sm:text-sm uppercase tracking-wider py-1">
                                     {label}
                                   </div>
                                 </td>
                               )}
-                              <td className="border-r-2 border-slate-900 font-black text-[10px] sm:text-xs text-slate-950 bg-slate-100 p-0.5 sm:p-1 w-6 sm:w-8 md:w-10">
+                              <td className="sticky left-12 sm:left-14 z-10 border-r-2 border-slate-900 font-black text-xs text-slate-950 bg-white p-1 w-8 sm:w-10 min-w-[32px] sm:min-w-[40px] print:static print:bg-slate-100">
                                 {period}
                               </td>
                               {targetClasses.map((cls) => {
-                                const content = getCellContentForClass(
+                                const cellData = getClassSlotDetails(
                                   slots,
                                   subjectsMap,
                                   teachersMap,
@@ -746,12 +907,26 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={cls.id}
-                                    title={content || ''}
-                                    className={`border-r border-slate-900 last:border-r-0 px-0.5 sm:px-1 py-1 sm:py-1.5 font-bold align-middle truncate ${
-                                      content ? 'text-slate-950' : 'text-slate-300'
+                                    title={
+                                      cellData.teacher
+                                        ? `${cellData.subject} (${cellData.teacher})`
+                                        : cellData.subject
+                                    }
+                                    className={`border-r border-slate-900 last:border-r-0 px-2 py-2 min-w-[110px] sm:min-w-[120px] print:min-w-0 print:px-0.5 print:py-0.5 align-middle ${
+                                      cellData.subject ? 'text-slate-950 bg-white' : 'text-slate-300 bg-white'
                                     }`}
                                   >
-                                    {content || '-'}
+                                    {cellData.subject ? (
+                                      <div className="py-0.5 px-0.5 print:py-0">
+                                        <span className="font-semibold text-xs sm:text-[13px] print:text-[9px] text-slate-950 leading-tight">
+                                          {cellData.teacher
+                                            ? `${cellData.subject} - ${cellData.teacher}`
+                                            : cellData.subject}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300 font-bold">-</span>
+                                    )}
                                   </td>
                                 );
                               })}
@@ -806,7 +981,9 @@ export const ExportTimetableView: React.FC<Props> = ({
                             Giáo viên chủ nhiệm: <strong>{homeroomTeacher}</strong>
                           </span>
                         ) : (
-                          <span>Lớp: <strong>{cls.name}</strong></span>
+                          <span>
+                            Lớp: <strong>{cls.name}</strong>
+                          </span>
                         )}
                       </div>
                       <div>
@@ -818,20 +995,20 @@ export const ExportTimetableView: React.FC<Props> = ({
                   {/* BẢNG BUỔI SÁNG & BUỔI CHIỀU CỦA LỚP */}
                   <div className="space-y-4 w-full">
                     {/* Buổi Sáng */}
-                    <div className="w-full overflow-hidden rounded-lg">
-                      <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
+                    <div className="w-full overflow-x-auto custom-scrollbar shadow-inner rounded-xl border-2 border-slate-900 print:overflow-visible print:shadow-none print:rounded-none">
+                      <div className="bg-slate-200 border-b-2 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi sáng
                       </div>
-                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-auto print:table-fixed border-collapse text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-2 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
                               <th
                                 key={key}
-                                className="border-r-2 border-slate-900 last:border-r-0 py-1.5 font-black text-slate-950 uppercase"
+                                className="border-r-2 border-slate-900 last:border-r-0 py-2 font-black text-slate-950 uppercase min-w-[100px] sm:min-w-[110px] print:min-w-0"
                               >
                                 {label}
                               </th>
@@ -844,11 +1021,11 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`cls_m_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
-                                const val = getCellContentForClass(
+                                const cellData = getClassSlotDetails(
                                   slots,
                                   subjectsMap,
                                   teachersMap,
@@ -858,20 +1035,39 @@ export const ExportTimetableView: React.FC<Props> = ({
                                   cls.id,
                                   'MORNING'
                                 );
-                                const isCC = val === 'Chào cờ';
                                 return (
                                   <td
                                     key={day}
-                                    title={val || ''}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
-                                      isCC
+                                    title={
+                                      cellData.teacher
+                                        ? `${cellData.subject} (${cellData.teacher})`
+                                        : cellData.subject
+                                    }
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-2 py-2 align-middle ${
+                                      cellData.isCC
                                         ? 'bg-amber-100 text-amber-950 font-black'
-                                        : val
-                                        ? 'text-slate-950'
-                                        : 'text-slate-300'
+                                        : cellData.subject
+                                        ? 'text-slate-950 bg-white'
+                                        : 'text-slate-300 bg-white'
                                     }`}
                                   >
-                                    {val || '-'}
+                                    {cellData.subject ? (
+                                      <div className="py-0.5 px-0.5 print:py-0">
+                                        <span
+                                          className={`font-semibold text-xs sm:text-[13px] print:text-[9px] leading-tight ${
+                                            cellData.isCC
+                                              ? 'font-black text-amber-950'
+                                              : 'text-slate-950'
+                                          }`}
+                                        >
+                                          {cellData.teacher
+                                            ? `${cellData.subject} - ${cellData.teacher}`
+                                            : cellData.subject}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300 font-bold">-</span>
+                                    )}
                                   </td>
                                 );
                               })}
@@ -882,20 +1078,20 @@ export const ExportTimetableView: React.FC<Props> = ({
                     </div>
 
                     {/* Buổi Chiều */}
-                    <div className="w-full overflow-hidden rounded-lg">
-                      <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
+                    <div className="w-full overflow-x-auto custom-scrollbar shadow-inner rounded-xl border-2 border-slate-900 print:overflow-visible print:shadow-none print:rounded-none">
+                      <div className="bg-slate-200 border-b-2 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi chiều
                       </div>
-                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-auto print:table-fixed border-collapse text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-2 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
                               <th
                                 key={key}
-                                className="border-r-2 border-slate-900 last:border-r-0 py-1.5 font-black text-slate-950 uppercase"
+                                className="border-r-2 border-slate-900 last:border-r-0 py-2 font-black text-slate-950 uppercase min-w-[100px] sm:min-w-[110px] print:min-w-0"
                               >
                                 {label}
                               </th>
@@ -908,11 +1104,11 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`cls_a_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
-                                const val = getCellContentForClass(
+                                const cellData = getClassSlotDetails(
                                   slots,
                                   subjectsMap,
                                   teachersMap,
@@ -925,12 +1121,26 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={day}
-                                    title={val || ''}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
-                                      val ? 'text-slate-950' : 'text-slate-300'
+                                    title={
+                                      cellData.teacher
+                                        ? `${cellData.subject} (${cellData.teacher})`
+                                        : cellData.subject
+                                    }
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-2 py-2 align-middle ${
+                                      cellData.subject ? 'text-slate-950 bg-white' : 'text-slate-300 bg-white'
                                     }`}
                                   >
-                                    {val || '-'}
+                                    {cellData.subject ? (
+                                      <div className="py-0.5 px-0.5 print:py-0">
+                                        <span className="font-semibold text-xs sm:text-[13px] print:text-[9px] text-slate-950 leading-tight">
+                                          {cellData.teacher
+                                            ? `${cellData.subject} - ${cellData.teacher}`
+                                            : cellData.subject}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300 font-bold">-</span>
+                                    )}
                                   </td>
                                 );
                               })}
@@ -987,20 +1197,20 @@ export const ExportTimetableView: React.FC<Props> = ({
                   {/* BẢNG BUỔI SÁNG & BUỔI CHIỀU CỦA GIÁO VIÊN */}
                   <div className="space-y-4 w-full">
                     {/* Buổi Sáng */}
-                    <div className="w-full overflow-hidden rounded-lg">
-                      <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
+                    <div className="w-full overflow-x-auto custom-scrollbar shadow-inner rounded-xl border-2 border-slate-900 print:overflow-visible print:shadow-none print:rounded-none">
+                      <div className="bg-slate-200 border-b-2 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi sáng
                       </div>
-                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-auto print:table-fixed border-collapse text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-2 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
                               <th
                                 key={key}
-                                className="border-r-2 border-slate-900 last:border-r-0 py-1.5 font-black text-slate-950 uppercase"
+                                className="border-r-2 border-slate-900 last:border-r-0 py-2 font-black text-slate-950 uppercase min-w-[100px] sm:min-w-[110px] print:min-w-0"
                               >
                                 {label}
                               </th>
@@ -1013,11 +1223,11 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`t_m_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
-                                const val = getCellContentForTeacher(
+                                const detail = getTeacherSlotDetails(
                                   slots,
                                   subjectsMap,
                                   classesMap,
@@ -1029,12 +1239,24 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={day}
-                                    title={val || ''}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
-                                      val ? 'text-slate-950 font-black' : 'text-slate-300'
+                                    title={
+                                      detail.className
+                                        ? `${detail.className} - ${detail.subjectName}`
+                                        : ''
+                                    }
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-2 py-2 align-middle ${
+                                      detail.className ? 'text-slate-950 bg-white' : 'text-slate-300 bg-white'
                                     }`}
                                   >
-                                    {val || '-'}
+                                    {detail.className ? (
+                                      <div className="py-0.5 px-0.5 print:py-0">
+                                        <span className="font-bold text-xs sm:text-[13px] print:text-[9px] text-slate-950 leading-tight">
+                                          {detail.className} - {detail.subjectName}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300 font-bold">-</span>
+                                    )}
                                   </td>
                                 );
                               })}
@@ -1045,20 +1267,20 @@ export const ExportTimetableView: React.FC<Props> = ({
                     </div>
 
                     {/* Buổi Chiều */}
-                    <div className="w-full overflow-hidden rounded-lg">
-                      <div className="bg-slate-200 border-2 border-b-0 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
+                    <div className="w-full overflow-x-auto custom-scrollbar shadow-inner rounded-xl border-2 border-slate-900 print:overflow-visible print:shadow-none print:rounded-none">
+                      <div className="bg-slate-200 border-b-2 border-slate-900 px-3 py-1 text-xs font-black text-slate-900">
                         Buổi chiều
                       </div>
-                      <table className="w-full table-fixed border-collapse border-2 border-slate-900 text-center text-xs">
+                      <table className="w-full table-auto print:table-fixed border-collapse text-center text-xs">
                         <thead>
                           <tr className="border-b-2 border-slate-900 bg-sky-300">
-                            <th className="border-r-2 border-slate-900 py-1.5 w-12 sm:w-14 font-black text-slate-950">
+                            <th className="border-r-2 border-slate-900 py-2 w-12 sm:w-14 font-black text-slate-950">
                               Tiết
                             </th>
                             {DAYS_OF_WEEK.map(({ key, label }) => (
                               <th
                                 key={key}
-                                className="border-r-2 border-slate-900 last:border-r-0 py-1.5 font-black text-slate-950 uppercase"
+                                className="border-r-2 border-slate-900 last:border-r-0 py-2 font-black text-slate-950 uppercase min-w-[100px] sm:min-w-[110px] print:min-w-0"
                               >
                                 {label}
                               </th>
@@ -1071,11 +1293,11 @@ export const ExportTimetableView: React.FC<Props> = ({
                               key={`t_a_${period}`}
                               className="border-b border-slate-900 last:border-b-0 hover:bg-slate-50"
                             >
-                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-1.5 sm:py-2">
+                              <td className="border-r-2 border-slate-900 font-black text-slate-950 bg-slate-100 py-2">
                                 {period}
                               </td>
                               {DAYS_OF_WEEK.map(({ key: day }) => {
-                                const val = getCellContentForTeacher(
+                                const detail = getTeacherSlotDetails(
                                   slots,
                                   subjectsMap,
                                   classesMap,
@@ -1087,12 +1309,24 @@ export const ExportTimetableView: React.FC<Props> = ({
                                 return (
                                   <td
                                     key={day}
-                                    title={val || ''}
-                                    className={`border-r-2 border-slate-900 last:border-r-0 px-1 py-1.5 font-bold truncate ${
-                                      val ? 'text-slate-950 font-black' : 'text-slate-300'
+                                    title={
+                                      detail.className
+                                        ? `${detail.className} - ${detail.subjectName}`
+                                        : ''
+                                    }
+                                    className={`border-r-2 border-slate-900 last:border-r-0 px-2 py-2 align-middle ${
+                                      detail.className ? 'text-slate-950 bg-white' : 'text-slate-300 bg-white'
                                     }`}
                                   >
-                                    {val || '-'}
+                                    {detail.className ? (
+                                      <div className="py-0.5 px-0.5 print:py-0">
+                                        <span className="font-bold text-xs sm:text-[13px] print:text-[9px] text-slate-950 leading-tight">
+                                          {detail.className} - {detail.subjectName}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300 font-bold">-</span>
+                                    )}
                                   </td>
                                 );
                               })}
@@ -1124,12 +1358,12 @@ export const ExportTimetableView: React.FC<Props> = ({
         @media print {
           @page {
             size: landscape;
-            margin: 6mm;
+            margin: 5mm;
           }
           body {
             background: #ffffff !important;
             color: #000000 !important;
-            font-size: 9px !important;
+            font-size: 8.5px !important;
           }
           aside, header, nav, .print\\:hidden {
             display: none !important;
@@ -1140,18 +1374,36 @@ export const ExportTimetableView: React.FC<Props> = ({
             background: #ffffff !important;
             width: 100% !important;
           }
+          .overflow-x-auto, .overflow-hidden {
+            overflow: visible !important;
+          }
           table {
             border-collapse: collapse !important;
             border: 1.5px solid #000000 !important;
             page-break-inside: avoid;
             width: 100% !important;
+            table-layout: fixed !important;
           }
           th, td {
             border: 1px solid #000000 !important;
-            padding: 3px !important;
+            padding: 1.5px !important;
+            min-width: 0 !important;
+            font-size: 8.5px !important;
+            line-height: 1.15 !important;
+          }
+          th {
+            font-size: 9px !important;
+          }
+          .sticky {
+            position: static !important;
           }
           .bg-sky-300 {
             background-color: #7dd3fc !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .bg-sky-100 {
+            background-color: #e0f2fe !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
