@@ -45,24 +45,40 @@ export async function getSystemUsers(existingSchools?: School[]): Promise<UserPr
     let schoolsList = existingSchools;
     if (!schoolsList || schoolsList.length === 0) {
       try {
-        schoolsList = await getAllSchools();
+        schoolsList = await getAllSchools(undefined, undefined, true);
       } catch {
         schoolsList = getLocalSchoolCache();
       }
     }
-    const validSchoolIdSet = new Set((schoolsList || []).map((s) => s.schoolId));
 
     const snap = await getDocs(collection(db, USERS_COLLECTION));
     if (snap.empty) return [];
 
     const activeUsers: UserProfile[] = [];
-    const orphanedDocRefs: any[] = [];
-    const orphanedUids: string[] = [];
+
+    // RÀO CHẮN AN TOÀN: Nếu danh sách trường đang rỗng hoặc chưa tải xong, TUYỆT ĐỐI không đánh giá mồ côi hay xóa
+    const isSchoolsLoaded = Boolean(schoolsList && schoolsList.length > 0);
+
+    const norm = (str?: string) => (str || '').trim().toLowerCase();
+    const validSchoolIdSet = new Set<string>();
+    const validAdminUids = new Set<string>();
+    const validAdminUsernames = new Set<string>();
+
+    if (isSchoolsLoaded && schoolsList) {
+      schoolsList.forEach((s) => {
+        if (s.schoolId) validSchoolIdSet.add(norm(s.schoolId));
+        if (s.adminUid) validAdminUids.add(s.adminUid);
+        if (s.adminUsername) validAdminUsernames.add(norm(s.adminUsername));
+      });
+    }
 
     snap.docs.forEach((d) => {
       const data = d.data();
       const role = data.role || 'school_admin';
-      const schoolId = data.schoolId || undefined;
+      const rawSchoolId = data.schoolId || undefined;
+      const normSchoolId = norm(rawSchoolId);
+      const rawUsername = data.username || undefined;
+      const normUsername = norm(rawUsername);
 
       // Tài khoản Super Admin không phụ thuộc vào trường
       if (role === 'super_admin') {
@@ -78,15 +94,26 @@ export async function getSystemUsers(existingSchools?: School[]): Promise<UserPr
         return;
       }
 
-      // Đối với tài khoản trường (school_admin):
-      // Nếu trường liên kết đã bị xóa khỏi hệ thống (schoolId không còn trong validSchoolIdSet)
-      if (!schoolId || !validSchoolIdSet.has(schoolId)) {
-        orphanedDocRefs.push(d.ref);
-        orphanedUids.push(d.id);
-        return;
+      // Đối với tài khoản trường (school_admin / teacher):
+      let matchedSchool: School | undefined = undefined;
+      let isOrphaned = false;
+
+      if (isSchoolsLoaded && schoolsList) {
+        matchedSchool = schoolsList.find(
+          (s) =>
+            (normSchoolId && norm(s.schoolId) === normSchoolId) ||
+            (s.adminUid && s.adminUid === d.id) ||
+            (normUsername && s.adminUsername && norm(s.adminUsername) === normUsername)
+        );
+
+        if (!matchedSchool && normSchoolId && !validSchoolIdSet.has(normSchoolId)) {
+          isOrphaned = true;
+          console.warn(
+            `⚠️ [superAdminService] Cảnh báo: Tài khoản "${rawUsername || d.id}" gắn với mã trường "${rawSchoolId}" không tìm thấy trong danh sách trường hoạt động.`
+          );
+        }
       }
 
-      const matchedSchool = (schoolsList || []).find((s) => s.schoolId === schoolId);
       activeUsers.push({
         uid: d.id,
         username: data.username,
@@ -94,21 +121,15 @@ export async function getSystemUsers(existingSchools?: School[]): Promise<UserPr
         email: data.email || '',
         displayName: data.displayName || '',
         role,
-        schoolId,
+        schoolId: matchedSchool ? matchedSchool.schoolId : rawSchoolId,
         schoolName: data.schoolName || matchedSchool?.schoolName || undefined,
+        isOrphaned,
         createdAt: data.createdAt ? (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate().toISOString() : data.createdAt) : new Date().toISOString(),
       } as UserProfile);
     });
 
-    // 2. Tự động xóa vĩnh viễn các tài khoản mồ côi (trường học đã bị xóa) khỏi Firebase và Local Cache
-    if (orphanedDocRefs.length > 0) {
-      console.log(`🧹 [superAdminService] Phát hiện ${orphanedDocRefs.length} tài khoản gắn với trường đã bị xóa. Đang tự động dọn dẹp...`);
-      Promise.allSettled(orphanedDocRefs.map((ref) => deleteDoc(ref))).then(() => {
-        console.log(`✅ [superAdminService] Đã xóa thành công ${orphanedDocRefs.length} tài khoản mồ côi khỏi Firestore.`);
-      }).catch((e) => console.warn('Lỗi khi xóa tài khoản mồ côi:', e));
-
-      orphanedUids.forEach((uid) => deleteLocalUserRegistryByUid(uid));
-    }
+    // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG XÓA deleteDoc() Ở ĐÂY!
+    // Mọi thao tác xóa tài khoản phải do Super Admin xác nhận thủ công trên giao diện.
 
     return activeUsers;
   } catch (err: any) {
@@ -134,19 +155,29 @@ export async function deleteUserAccount(uid: string): Promise<boolean> {
 }
 
 /**
- * 1.2 DỌN DẸP TOÀN BỘ TÀI KHOẢN MỒ CÔI (TÀI KHOẢN CÓ TRƯỜNG ĐÃ BỊ XÓA)
+ * 1.2 DỌN DẸP TOÀN BỘ TÀI KHOẢN MỒ CÔI (TÀI KHOẢN CÓ TRƯỜNG ĐÃ BỊ XÓA - THỦ CÔNG QUA NÚT BẤM CỦA SUPER ADMIN)
  */
 export async function cleanupOrphanedAccounts(existingSchools?: School[]): Promise<{ cleanedCount: number; cleanedUids: string[] }> {
   try {
     let schoolsList = existingSchools;
     if (!schoolsList || schoolsList.length === 0) {
       try {
-        schoolsList = await getAllSchools();
+        schoolsList = await getAllSchools(undefined, undefined, true);
       } catch {
         schoolsList = getLocalSchoolCache();
       }
     }
-    const validSchoolIdSet = new Set((schoolsList || []).map((s) => s.schoolId));
+
+    // RÀO CHẮN AN TOÀN: KHÔNG ĐƯỢC thực hiện dọn dẹp nếu danh sách trường đang rỗng hoặc chưa load xong
+    if (!schoolsList || schoolsList.length === 0) {
+      console.warn('⚠️ [cleanupOrphanedAccounts] Danh sách trường đang rỗng hoặc chưa tải xong. Hủy lệnh dọn dẹp để bảo vệ dữ liệu.');
+      return { cleanedCount: 0, cleanedUids: [] };
+    }
+
+    const norm = (str?: string) => (str || '').trim().toLowerCase();
+    const validSchoolIdSet = new Set(schoolsList.map((s) => norm(s.schoolId)).filter(Boolean));
+    const validAdminUids = new Set(schoolsList.map((s) => s.adminUid).filter(Boolean));
+    const validAdminUsernames = new Set(schoolsList.map((s) => norm(s.adminUsername)).filter(Boolean));
 
     const snap = await getDocs(collection(db, USERS_COLLECTION));
     if (snap.empty) return { cleanedCount: 0, cleanedUids: [] };
@@ -158,11 +189,16 @@ export async function cleanupOrphanedAccounts(existingSchools?: School[]): Promi
       const data = d.data();
       if (data.role === 'super_admin') return;
 
-      const sid = data.schoolId;
-      if (!sid || !validSchoolIdSet.has(sid)) {
-        toDeleteRefs.push(d.ref);
-        cleanedUids.push(d.id);
-      }
+      const normSchoolId = norm(data.schoolId);
+      const normUsername = norm(data.username);
+
+      // Nếu có liên kết với trường đang tồn tại qua schoolId, adminUid hoặc adminUsername thì coi là hợp lệ
+      if (normSchoolId && validSchoolIdSet.has(normSchoolId)) return;
+      if (validAdminUids.has(d.id)) return;
+      if (normUsername && validAdminUsernames.has(normUsername)) return;
+
+      toDeleteRefs.push(d.ref);
+      cleanedUids.push(d.id);
     });
 
     if (toDeleteRefs.length > 0) {

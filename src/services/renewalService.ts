@@ -21,6 +21,26 @@ import { extendSchoolExpiryByDays } from './superAdminService';
 export const RENEWAL_REQUESTS_COLLECTION = 'renewal_requests';
 const PENDING_SYNC_KEY = 'pending_sync_renewal_requests';
 
+/**
+ * CẤU HÌNH NGÂN HÀNG & BẢNG GIÁ GIA HẠN BẢN QUYỀN
+ */
+export const BANK_CONFIG = {
+  BANK_ID: 'VBA',
+  BANK_NAME: 'Agribank (Ngân hàng Nông nghiệp & PTNT Việt Nam)',
+  ACCOUNT_NO: '5105205024485',
+  ACCOUNT_NAME: 'VÕ CHIẾN',
+};
+
+export const RENEWAL_PRICING: Record<number, { price: number; label: string; sub: string }> = {
+  3: { price: 199000, label: '3 Tháng', sub: 'Gói 3 tháng' },
+  6: { price: 399000, label: '6 Tháng', sub: 'Gói 6 tháng' },
+  12: { price: 599000, label: '12 Tháng', sub: 'Gói 1 Năm' },
+};
+
+export function calculateRenewalMemo(schoolId: string, months: number): string {
+  return `GIAHAN ${String(schoolId || '').trim()} ${months}T`;
+}
+
 function getLocalRenewalCache(schoolId?: string): RenewalRequest[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -106,6 +126,8 @@ export async function syncPendingRenewalRequests(): Promise<void> {
           adminUsername: String(item.adminUsername || '').trim(),
           months: Number(item.months) || 12,
           packageName: String(item.packageName || 'Gói gia hạn').trim(),
+          price: typeof item.price === 'number' ? item.price : RENEWAL_PRICING[item.months]?.price || 0,
+          memo: String(item.memo || calculateRenewalMemo(item.schoolId, item.months)).trim(),
           phone: String(item.phone || '').trim(),
           notes: String(item.notes || '').trim(),
           status: item.status || 'pending',
@@ -140,6 +162,8 @@ export async function submitRenewalRequest(payload: {
   adminEmail: string;
   adminUsername?: string;
   months: number;
+  price?: number;
+  memo?: string;
   phone: string;
   notes?: string;
 }): Promise<{ success: boolean; id?: string; error?: string }> {
@@ -151,6 +175,8 @@ export async function submitRenewalRequest(payload: {
     const phone = String(payload.phone || '').trim();
     const notes = String(payload.notes || '').trim();
     const months = Number(payload.months) || 12;
+    const price = typeof payload.price === 'number' ? payload.price : RENEWAL_PRICING[months]?.price || 0;
+    const memo = String(payload.memo || calculateRenewalMemo(schoolId, months)).trim();
 
     if (!schoolId) {
       return { success: false, error: 'Thiếu thông tin Mã Trường (School ID)' };
@@ -183,6 +209,8 @@ export async function submitRenewalRequest(payload: {
       adminUsername,
       months,
       packageName,
+      price,
+      memo,
       phone,
       notes,
       status: 'pending',
@@ -205,6 +233,8 @@ export async function submitRenewalRequest(payload: {
         adminUsername,
         months,
         packageName,
+        price,
+        memo,
         phone,
         notes,
         status: 'pending',
@@ -254,14 +284,17 @@ export async function fetchSchoolRenewalRequests(schoolId: string): Promise<Rene
       const remoteList: RenewalRequest[] = [];
       snap.docs.forEach((d) => {
         const data = d.data();
+        const m = Number(data.months) || 12;
         remoteList.push({
           id: d.id,
           schoolId: String(data.schoolId || schoolId).trim(),
           schoolName: String(data.schoolName || '').trim(),
           adminEmail: String(data.adminEmail || '').trim(),
           adminUsername: String(data.adminUsername || '').trim(),
-          months: Number(data.months) || 12,
-          packageName: String(data.packageName || `${data.months || 12} tháng`).trim(),
+          months: m,
+          packageName: String(data.packageName || `${m} tháng`).trim(),
+          price: typeof data.price === 'number' ? data.price : RENEWAL_PRICING[m]?.price,
+          memo: data.memo || calculateRenewalMemo(data.schoolId || schoolId, m),
           phone: String(data.phone || '').trim(),
           notes: String(data.notes || '').trim(),
           status: data.status || 'pending',
@@ -305,14 +338,17 @@ export async function fetchAllRenewalRequests(): Promise<RenewalRequest[]> {
       const remoteList: RenewalRequest[] = [];
       snap.docs.forEach((d) => {
         const data = d.data();
+        const m = Number(data.months) || 12;
         remoteList.push({
           id: d.id,
           schoolId: String(data.schoolId || '').trim(),
           schoolName: String(data.schoolName || '').trim(),
           adminEmail: String(data.adminEmail || '').trim(),
           adminUsername: String(data.adminUsername || '').trim(),
-          months: Number(data.months) || 12,
-          packageName: String(data.packageName || `${data.months || 12} tháng`).trim(),
+          months: m,
+          packageName: String(data.packageName || `${m} tháng`).trim(),
+          price: typeof data.price === 'number' ? data.price : RENEWAL_PRICING[m]?.price,
+          memo: data.memo || calculateRenewalMemo(data.schoolId, m),
           phone: String(data.phone || '').trim(),
           notes: String(data.notes || '').trim(),
           status: data.status || 'pending',
@@ -367,14 +403,17 @@ export function subscribeToRenewalRequestsRealtime(
           const list: RenewalRequest[] = [];
           snapshot.forEach((d) => {
             const data = d.data();
+            const m = Number(data.months) || 12;
             list.push({
               id: d.id,
               schoolId: String(data.schoolId || '').trim(),
               schoolName: String(data.schoolName || '').trim(),
               adminEmail: String(data.adminEmail || '').trim(),
               adminUsername: String(data.adminUsername || '').trim(),
-              months: Number(data.months) || 12,
-              packageName: String(data.packageName || `${data.months || 12} tháng`).trim(),
+              months: m,
+              packageName: String(data.packageName || `${m} tháng`).trim(),
+              price: typeof data.price === 'number' ? data.price : RENEWAL_PRICING[m]?.price,
+              memo: data.memo || calculateRenewalMemo(data.schoolId, m),
               phone: String(data.phone || '').trim(),
               notes: String(data.notes || '').trim(),
               status: data.status || 'pending',

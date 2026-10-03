@@ -1538,14 +1538,24 @@ export const SuperAdminDashboard: React.FC<Props> = ({
                           </div>
                         </td>
 
-                        {/* Cột 2: Gói cước & Liên hệ */}
-                        <td className="py-3.5 px-4 space-y-1">
-                          <div>
+                        {/* Cột 2: Gói cước & Thanh toán & Liên hệ */}
+                        <td className="py-3.5 px-4 space-y-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-black text-xs text-indigo-700 bg-indigo-100/80 px-2.5 py-1 rounded-lg border border-indigo-300 inline-flex items-center gap-1">
                               <Sparkles className="w-3 h-3 text-indigo-600" />
                               <span>{req.packageName || `Gói ${req.months} Tháng`}</span>
                             </span>
+                            {req.price && (
+                              <span className="font-black text-xs text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-lg border border-amber-300">
+                                {req.price.toLocaleString('vi-VN')} đ
+                              </span>
+                            )}
                           </div>
+                          {req.memo && (
+                            <div className="text-[11px] font-mono font-bold bg-slate-900 text-amber-300 px-2 py-1 rounded border border-slate-700 flex items-center justify-between">
+                              <span>Cú pháp: {req.memo}</span>
+                            </div>
+                          )}
                           <div className="text-[11px] text-slate-700 flex items-center gap-1">
                             <Phone className="w-3.5 h-3.5 text-indigo-600" />
                             <a href={`tel:${req.phone}`} className="font-bold hover:underline text-indigo-600">
@@ -1722,7 +1732,14 @@ export const SuperAdminDashboard: React.FC<Props> = ({
                   {filteredUsers.map((u) => (
                     <tr key={u.uid} className="border-b border-slate-150 hover:bg-slate-50 transition-all font-medium text-slate-800">
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{u.displayName || 'Chưa đặt tên'}</div>
+                        <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                          <span>{u.displayName || 'Chưa đặt tên'}</span>
+                          {u.isOrphaned && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300" title="Trường liên kết chưa được tìm thấy trong danh sách trường">
+                              ⚠️ Cần kiểm tra trường
+                            </span>
+                          )}
+                        </div>
                         <div className="text-slate-500 font-semibold text-[11px] mt-0.5">{u.email}</div>
                       </td>
                       <td className="py-3.5 px-4 font-mono text-[10px] text-slate-500">{u.uid}</td>

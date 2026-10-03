@@ -41,6 +41,7 @@ export interface UserProfile {
   schoolName?: string;
   passwordHash?: string;
   createdAt: string;
+  isOrphaned?: boolean;
 }
 
 export interface LoginCredentials {
@@ -97,6 +98,8 @@ export interface RenewalRequest {
   adminUsername?: string;
   months: number; // 3, 6, 12
   packageName: string; // 'Gói 3 tháng' | 'Gói 6 tháng' | 'Gói 12 tháng' (hoặc 'Gói 1 năm')
+  price?: number; // Số tiền tương ứng (VNĐ)
+  memo?: string; // Nội dung chuyển khoản theo cú pháp: GIAHAN [schoolId] [months]T
   phone: string;
   notes?: string;
   status: RenewalStatus;

@@ -210,21 +210,21 @@ function isAccountCandidateMatch(
   lower: string,
   digitsOnly: string
 ): boolean {
-  const uName = (candidate.adminUsername || candidate.username || '').toLowerCase();
+  const uName = (candidate.adminUsername || candidate.username || '').trim().toLowerCase();
   const uPhone = (candidate.phone || '').replace(/[\s.-]/g, '');
-  const uEmail = (candidate.adminEmail || candidate.email || '').toLowerCase();
+  const uEmail = (candidate.adminEmail || candidate.email || '').trim().toLowerCase();
   const uEmailPrefix = uEmail.includes('@') ? uEmail.split('@')[0] : uEmail;
-  const uSid = (candidate.schoolId || '').toLowerCase();
-  const uCode = (candidate.code || '').toLowerCase();
-  const uSchoolName = (candidate.schoolName || '').toLowerCase();
-  const uUid = (candidate.uid || '').toLowerCase();
+  const uSid = (candidate.schoolId || '').trim().toLowerCase();
+  const uCode = (candidate.code || '').trim().toLowerCase();
+  const uSchoolName = (candidate.schoolName || '').trim().toLowerCase();
+  const uUid = (candidate.uid || '').trim().toLowerCase();
 
   const lowerPrefix = lower.includes('@') ? lower.split('@')[0] : lower;
 
   // 1. Khớp theo username
-  if (uName && (uName === lower || uName === lowerPrefix)) return true;
+  if (uName && (uName === lower || uName === lowerPrefix || uName === raw.trim())) return true;
   // 2. Khớp theo số điện thoại
-  if (digitsOnly && uPhone && (uPhone === digitsOnly || candidate.phone === raw)) return true;
+  if (digitsOnly && uPhone && (uPhone === digitsOnly || (candidate.phone || '').trim() === raw.trim())) return true;
   // 3. Khớp theo Email hoặc Email Prefix (Ví dụ: vochien1004 khớp với vochien1004@gmail.com)
   if (uEmail) {
     if (
@@ -243,7 +243,7 @@ function isAccountCandidateMatch(
   if (uCode && (uCode === lower || uCode === lowerPrefix)) return true;
   // 5. Khớp theo UID hoặc School Name chính xác
   if (uUid && uUid === lower) return true;
-  if (uSchoolName && (uSchoolName === lower || uSchoolName === raw.toLowerCase())) return true;
+  if (uSchoolName && (uSchoolName === lower || uSchoolName === raw.trim().toLowerCase())) return true;
 
   return false;
 }
@@ -278,7 +278,98 @@ export async function findUserByIdentifier(identifier: string): Promise<{
     };
   }
 
-  // 2. Tra cứu trong Cache Trường học (cached_schools_list)
+  // 2. Tra cứu trực tiếp Firestore collection /schools bằng các Query chính xác
+  try {
+    const schoolsCol = collection(db, SCHOOLS_COLLECTION);
+    const queries = [
+      query(schoolsCol, where('adminUsername', '==', lower)),
+      query(schoolsCol, where('adminUsername', '==', raw)),
+      ...(digitsOnly ? [query(schoolsCol, where('phone', '==', digitsOnly)), query(schoolsCol, where('phone', '==', raw))] : []),
+      ...(lower.includes('@') ? [query(schoolsCol, where('adminEmail', '==', lower))] : []),
+    ];
+
+    for (const q of queries) {
+      try {
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const docSnap = snap.docs[0];
+          const sData = docSnap.data();
+          const schoolId = sData.schoolId || docSnap.id;
+          const s: School = {
+            ...sData,
+            schoolId,
+            schoolName: sData.schoolName || sData.name || schoolId,
+            status: sData.status || 'active',
+            adminUsername: sData.adminUsername || lower,
+            phone: sData.phone || digitsOnly,
+            adminPasswordInitial: sData.adminPasswordInitial || sData.adminPassword,
+            createdAt: sData.createdAt || new Date().toISOString(),
+            expiredAt: sData.expiredAt || '2099-12-31T23:59:59.000Z',
+          } as School;
+
+          const uProfile: UserProfile = {
+            uid: s.adminUid || `USR_${schoolId}`,
+            username: s.adminUsername || schoolId,
+            phone: s.phone,
+            email: s.adminEmail || `${s.adminUsername || schoolId}@school.tkbpro.edu.vn`,
+            displayName: s.representativeName || s.principalName || s.schoolName || s.adminUsername || 'Quản trị viên',
+            role: 'school_admin',
+            schoolId: s.schoolId,
+            schoolName: s.schoolName,
+            passwordHash: s.adminPasswordInitial || (s as any).adminPassword,
+            createdAt: s.createdAt,
+          };
+          saveLocalUserRegistry(uProfile);
+          saveLocalSchoolCache(s);
+          return { user: uProfile, school: s, matchedBy: 'username' };
+        }
+      } catch {
+        // Tiếp tục thử query kế tiếp
+      }
+    }
+
+    // Tra cứu theo doc ID của school
+    try {
+      const directSchoolDoc = await getDoc(doc(db, SCHOOLS_COLLECTION, raw));
+      if (directSchoolDoc.exists()) {
+        const sData = directSchoolDoc.data();
+        const schoolId = directSchoolDoc.id;
+        const s: School = {
+          ...sData,
+          schoolId,
+          schoolName: sData.schoolName || sData.name || schoolId,
+          status: sData.status || 'active',
+          adminUsername: sData.adminUsername || schoolId,
+          phone: sData.phone,
+          adminPasswordInitial: sData.adminPasswordInitial || sData.adminPassword,
+          createdAt: sData.createdAt || new Date().toISOString(),
+          expiredAt: sData.expiredAt || '2099-12-31T23:59:59.000Z',
+        } as School;
+
+        const uProfile: UserProfile = {
+          uid: s.adminUid || `USR_${schoolId}`,
+          username: s.adminUsername || schoolId,
+          phone: s.phone,
+          email: s.adminEmail || `${schoolId}@school.tkbpro.edu.vn`,
+          displayName: s.representativeName || s.principalName || s.schoolName || s.adminUsername || 'Quản trị viên',
+          role: 'school_admin',
+          schoolId: s.schoolId,
+          schoolName: s.schoolName,
+          passwordHash: s.adminPasswordInitial || (s as any).adminPassword,
+          createdAt: s.createdAt,
+        };
+        saveLocalUserRegistry(uProfile);
+        saveLocalSchoolCache(s);
+        return { user: uProfile, school: s, matchedBy: 'schoolId' };
+      }
+    } catch {
+      // ignore
+    }
+  } catch (firestoreErr) {
+    console.warn('Lỗi tra cứu nhanh schools trên Firestore:', firestoreErr);
+  }
+
+  // 3. Tra cứu trong Cache Trường học (cached_schools_list)
   const localSchools = getLocalSchoolCache();
   for (const s of localSchools) {
     if (isAccountCandidateMatch(s, raw, lower, digitsOnly)) {
@@ -303,25 +394,9 @@ export async function findUserByIdentifier(identifier: string): Promise<{
     }
   }
 
-  // 3. Tra cứu trong Cache User Registry
-  const localUsers = getLocalUserRegistry();
-  for (const u of localUsers) {
-    if (isAccountCandidateMatch(u, raw, lower, digitsOnly)) {
-      let matchedSchool: School | undefined = undefined;
-      if (u.schoolId) {
-        matchedSchool = localSchools.find((s) => s.schoolId === u.schoolId);
-      }
-      return {
-        user: { ...u, role: (u.role as any) || 'school_admin', createdAt: u.createdAt || new Date().toISOString() },
-        school: matchedSchool,
-        matchedBy: 'username',
-      };
-    }
-  }
-
-  // 4. Tra cứu danh sách trường học từ Firestore (schools collection)
+  // 4. Tra cứu danh sách tất cả các trường học từ Firestore (getAllSchools không lọc vai trò)
   try {
-    const remoteSchools = await getAllSchools();
+    const remoteSchools = await getAllSchools(undefined, undefined, true);
     for (const s of remoteSchools) {
       if (isAccountCandidateMatch(s, raw, lower, digitsOnly)) {
         const uProfile: UserProfile = {
@@ -337,6 +412,7 @@ export async function findUserByIdentifier(identifier: string): Promise<{
           createdAt: s.createdAt,
         };
         saveLocalUserRegistry(uProfile);
+        saveLocalSchoolCache(s);
         return {
           user: uProfile,
           school: s,
@@ -348,9 +424,51 @@ export async function findUserByIdentifier(identifier: string): Promise<{
     console.warn('Tra cứu remoteSchools gặp lỗi:', err);
   }
 
-  // 5. Tra cứu bộ sưu tập /users từ Firestore
+  // 5. Tra cứu trực tiếp Firestore collection /users
   try {
-    const usersSnap = await getDocs(collection(db, USERS_COLLECTION));
+    const usersCol = collection(db, USERS_COLLECTION);
+    const userQueries = [
+      query(usersCol, where('username', '==', lower)),
+      query(usersCol, where('username', '==', raw)),
+      ...(digitsOnly ? [query(usersCol, where('phone', '==', digitsOnly)), query(usersCol, where('phone', '==', raw))] : []),
+      ...(lower.includes('@') ? [query(usersCol, where('email', '==', lower))] : []),
+    ];
+
+    for (const uq of userQueries) {
+      try {
+        const uSnap = await getDocs(uq);
+        if (!uSnap.empty) {
+          const uDoc = uSnap.docs[0];
+          const data = uDoc.data();
+          const profile: UserProfile = {
+            uid: uDoc.id,
+            username: data.username,
+            phone: data.phone,
+            email: data.email,
+            displayName: data.displayName || data.username,
+            role: data.role || 'school_admin',
+            schoolId: data.schoolId,
+            schoolName: data.schoolName,
+            passwordHash: data.passwordHash,
+            createdAt: data.createdAt ? (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate().toISOString() : data.createdAt) : new Date().toISOString(),
+          };
+          saveLocalUserRegistry(profile);
+          let matchedSchool: School | undefined = undefined;
+          if (profile.schoolId) {
+            matchedSchool = (await getSchoolById(profile.schoolId)) || undefined;
+          }
+          return {
+            user: profile,
+            school: matchedSchool,
+            matchedBy: 'username',
+          };
+        }
+      } catch {
+        // continue
+      }
+    }
+
+    const usersSnap = await getDocs(usersCol);
     if (!usersSnap.empty) {
       for (const d of usersSnap.docs) {
         const data = d.data();
@@ -382,6 +500,22 @@ export async function findUserByIdentifier(identifier: string): Promise<{
     }
   } catch (err) {
     console.warn('Tra cứu usersSnap gặp lỗi:', err);
+  }
+
+  // 6. Tra cứu trong Cache User Registry
+  const localUsers = getLocalUserRegistry();
+  for (const u of localUsers) {
+    if (isAccountCandidateMatch(u, raw, lower, digitsOnly)) {
+      let matchedSchool: School | undefined = undefined;
+      if (u.schoolId) {
+        matchedSchool = localSchools.find((s) => s.schoolId === u.schoolId);
+      }
+      return {
+        user: { ...u, role: (u.role as any) || 'school_admin', createdAt: u.createdAt || new Date().toISOString() },
+        school: matchedSchool,
+        matchedBy: 'username',
+      };
+    }
   }
 
   return null;
@@ -503,26 +637,52 @@ export async function ensureAndSyncUserDocument(
 
     if (userSnap.exists()) {
       const data = userSnap.data();
+      let targetSchoolId = fallbackSchoolId || data.schoolId;
+      let targetSchoolName = data.schoolName;
+
+      // Nếu schoolId chưa có, thử tìm trường thực tế trên Firestore
+      if (!targetSchoolId) {
+        try {
+          const allSchools = await getAllSchools(undefined, undefined, true);
+          const uPrefix = email ? email.split('@')[0].toLowerCase() : '';
+          const matched = allSchools.find(
+            (s) =>
+              (s.adminUid && s.adminUid === uid) ||
+              (s.adminUsername && uPrefix && s.adminUsername.toLowerCase() === uPrefix) ||
+              (s.adminEmail && email && s.adminEmail.toLowerCase() === email)
+          );
+
+          if (matched) {
+            targetSchoolId = matched.schoolId;
+            targetSchoolName = matched.schoolName;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const profile: UserProfile = {
         uid: data.uid || uid,
-        username: data.username,
+        username: data.username || (email ? email.split('@')[0] : `user_${uid.slice(0, 6)}`),
         phone: data.phone,
         email: data.email || email,
-        displayName: data.displayName || firebaseUser.displayName || `Admin ${data.username || email.split('@')[0]}`,
+        displayName: data.displayName || firebaseUser.displayName || `Admin ${data.username || email.split('@')[0] || 'Trường'}`,
         role: data.role || 'school_admin',
-        schoolId: data.schoolId || fallbackSchoolId || 'thpt-chu-van-an-88e1',
-        schoolName: data.schoolName,
+        schoolId: targetSchoolId,
+        schoolName: targetSchoolName || data.schoolName,
         passwordHash: data.passwordHash,
         createdAt: data.createdAt ? (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate().toISOString() : data.createdAt) : new Date().toISOString(),
       };
 
-      // Đảm bảo document trên Firestore chứa đầy đủ { role, schoolId }
-      if (!data.role || data.schoolId === undefined) {
+      // Đảm bảo document trên Firestore chứa đầy đủ { role, schoolId, schoolName }
+      if (!data.role || (targetSchoolId && data.schoolId !== targetSchoolId)) {
         await setDoc(
           userDocRef,
           {
             role: profile.role,
-            schoolId: profile.schoolId,
+            schoolId: profile.schoolId || null,
+            schoolName: profile.schoolName || null,
+            username: profile.username,
             updatedAt: serverTimestamp(),
           },
           { merge: true }
@@ -531,8 +691,30 @@ export async function ensureAndSyncUserDocument(
       return profile;
     }
 
-    // 3. Nếu chưa có document tại /users/{uid} -> TỰ ĐỘNG KHỞI TẠO ĐỂ PHỤC HỒI TÀI KHỎAN
-    const schoolId = fallbackSchoolId || 'thpt-chu-van-an-88e1';
+    // 3. Nếu chưa có document tại /users/{uid} -> Chỉ khởi tạo profile liên kết trường thực tế (Không tạo trường giả)
+    let schoolId = fallbackSchoolId;
+    let schoolName: string | undefined = undefined;
+
+    if (!schoolId) {
+      try {
+        const allSchools = await getAllSchools(undefined, undefined, true);
+        const uPrefix = email ? email.split('@')[0].toLowerCase() : '';
+        const matched = allSchools.find(
+          (s) =>
+            (s.adminUid && s.adminUid === uid) ||
+            (s.adminUsername && uPrefix && s.adminUsername.toLowerCase() === uPrefix) ||
+            (s.adminEmail && email && s.adminEmail.toLowerCase() === email)
+        );
+
+        if (matched) {
+          schoolId = matched.schoolId;
+          schoolName = matched.schoolName;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     const fallbackUsername = email ? email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') : `user_${uid.slice(0, 6)}`;
     const newProfile: UserProfile = {
       uid,
@@ -540,7 +722,8 @@ export async function ensureAndSyncUserDocument(
       email,
       displayName: firebaseUser.displayName || `Admin ${fallbackUsername}`,
       role: 'school_admin',
-      schoolId,
+      schoolId: schoolId,
+      schoolName: schoolName,
       createdAt: new Date().toISOString(),
     };
 
@@ -552,26 +735,23 @@ export async function ensureAndSyncUserDocument(
         email,
         displayName: newProfile.displayName,
         role: 'school_admin',
-        schoolId,
+        schoolId: newProfile.schoolId || null,
+        schoolName: newProfile.schoolName || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       },
       { merge: true }
     );
 
-    // Tự động khởi tạo các sub-collections (/teachers, /classes, /subjects) cho trường
-    await seedSchoolSubcollections(schoolId, newProfile.displayName, email, uid);
-
-    console.log(`✅ [User Doc Auto-Repair] Đã tự động khởi tạo document /users/${uid} & sub-collections cho (schoolId=${schoolId})`);
     return newProfile;
   } catch (err) {
-    console.warn(`⚠️ [User Doc Auto-Repair] Lỗi khi tạo/phục hồi document /users/${uid}:`, err);
+    console.warn(`⚠️ [ensureAndSyncUserDocument] Lỗi khi tạo/phục hồi document /users/${uid}:`, err);
     return {
       uid,
       email,
-      displayName: `Admin ${email.split('@')[0]}`,
+      displayName: firebaseUser.displayName || `Admin ${email.split('@')[0] || 'User'}`,
       role: 'school_admin',
-      schoolId: fallbackSchoolId || 'thpt-chu-van-an-88e1',
+      schoolId: fallbackSchoolId,
       createdAt: new Date().toISOString(),
     };
   }
@@ -833,59 +1013,7 @@ export async function loginWithFirebaseAuth(credentials: {
     }
   }
 
-  // 2. TẠO DANH SÁCH EMAIL ỨNG VIÊN ĐỂ THỬ ĐĂNG NHẬP TRỰC TIẾP QUA FIREBASE AUTH
-  const emailCandidates: string[] = [];
-  if (lowerInput.includes('@')) {
-    emailCandidates.push(lowerInput);
-  } else {
-    emailCandidates.push(`${lowerInput}@gmail.com`);
-    emailCandidates.push(`${lowerInput}@school.tkbpro.edu.vn`);
-    emailCandidates.push(`${lowerInput}@tkbpro.edu.vn`);
-    emailCandidates.push(`${lowerInput}@edu.vn`);
-  }
-
-  // Bổ sung email từ cache cục bộ (nếu có)
-  const localSchools = getLocalSchoolCache();
-  for (const s of localSchools) {
-    if (isAccountCandidateMatch(s, rawInput, lowerInput, digitsOnly)) {
-      if (s.adminEmail) emailCandidates.push(s.adminEmail.toLowerCase());
-    }
-  }
-  const localUsers = getLocalUserRegistry();
-  for (const u of localUsers) {
-    if (isAccountCandidateMatch(u, rawInput, lowerInput, digitsOnly)) {
-      if (u.email) emailCandidates.push(u.email.toLowerCase());
-    }
-  }
-
-  const uniqueCandidates = Array.from(new Set(emailCandidates.map((e) => e.trim().toLowerCase())));
-
-  // BƯỚC 2A: Thử xác thực trực tiếp qua Firebase Auth với danh sách email ứng viên (Không cần quyền đọc Firestore trước)
-  let directAuthUser: FirebaseUser | null = null;
-  for (const em of uniqueCandidates) {
-    try {
-      const cred = await signInWithEmailAndPassword(auth, em, password);
-      if (cred.user) {
-        directAuthUser = cred.user;
-        break;
-      }
-    } catch {
-      // Tiếp tục thử email khác
-    }
-  }
-
-  // Nếu xác thực Firebase Auth thành công, lúc này request.auth != null nên đọc Firestore có đầy đủ quyền!
-  if (directAuthUser) {
-    try {
-      const syncedProfile = await ensureAndSyncUserDocument(directAuthUser);
-      syncedProfile.username = syncedProfile.username || rawInput;
-      return await resolveUserAccess(syncedProfile);
-    } catch (syncErr: any) {
-      console.warn('Lưu ý đồng bộ sau đăng nhập Auth:', syncErr);
-    }
-  }
-
-  // BƯỚC 2B: Nếu xác thực Firebase Auth trực tiếp chưa thành công, tra cứu tài khoản trong Cache hoặc Firestore
+  // 2. Tra cứu tài khoản trực tiếp trong Cache và Firestore trước
   let lookup: { user?: UserProfile; school?: School; matchedBy?: any } | null = null;
   try {
     lookup = await findUserByIdentifier(rawInput);
@@ -901,32 +1029,68 @@ export async function loginWithFirebaseAuth(credentials: {
     const validHashes = [
       targetUser.passwordHash,
       (targetUser as any).password,
+      (targetUser as any).adminPassword,
       targetSchool?.adminPasswordInitial,
       (targetSchool as any)?.adminPassword,
       (targetSchool as any)?.password,
       (targetSchool as any)?.passwordHash,
-    ].filter(Boolean);
+    ]
+      .filter(Boolean)
+      .map((v) => String(v).trim());
 
-    if (validHashes.some((h) => h === password)) {
-      // Mật khẩu khớp! Tự động khởi tạo tài khoản Firebase Auth ngầm
-      const emailToCreate =
+    const isPasswordMatched = validHashes.some((h) => h === password.trim());
+
+    if (isPasswordMatched) {
+      // Mật khẩu khớp! Cố gắng đăng nhập hoặc tạo tài khoản Firebase Auth ngầm
+      let authUserUid = targetUser.uid;
+      const emailToAuth =
         targetUser.email ||
-        (lowerInput.includes('@') ? lowerInput : `${lowerInput.split('@')[0]}@school.tkbpro.edu.vn`);
+        (lowerInput.includes('@') ? lowerInput : `${(targetUser.username || lowerInput).split('@')[0]}@school.tkbpro.edu.vn`);
+
       try {
-        if (emailToCreate) {
-          const newCred = await createUserWithEmailAndPassword(auth, emailToCreate, password);
-          targetUser.uid = newCred.user.uid;
+        const cred = await signInWithEmailAndPassword(auth, emailToAuth, password);
+        if (cred.user) {
+          authUserUid = cred.user.uid;
         }
       } catch {
-        // Đã tồn tại hoặc bỏ qua
+        try {
+          const newCred = await createUserWithEmailAndPassword(auth, emailToAuth, password);
+          if (newCred.user) {
+            authUserUid = newCred.user.uid;
+          }
+        } catch {
+          // Đã tồn tại hoặc bỏ qua
+        }
       }
 
-      const syncedProfile = await ensureAndSyncUserDocument(
-        { uid: targetUser.uid, email: targetUser.email, displayName: targetUser.displayName },
-        targetUser.schoolId
-      );
+      let syncedProfile: UserProfile;
+      try {
+        syncedProfile = await ensureAndSyncUserDocument(
+          {
+            uid: authUserUid,
+            email: emailToAuth,
+            displayName: targetUser.displayName || targetSchool?.schoolName,
+          },
+          targetSchool?.schoolId || targetUser.schoolId
+        );
+      } catch {
+        syncedProfile = {
+          ...targetUser,
+          uid: authUserUid,
+          schoolId: targetSchool?.schoolId || targetUser.schoolId,
+          schoolName: targetSchool?.schoolName || targetUser.schoolName,
+        };
+      }
+
       syncedProfile.username = targetUser.username || rawInput;
       syncedProfile.phone = targetUser.phone || syncedProfile.phone;
+      syncedProfile.schoolId = targetSchool?.schoolId || syncedProfile.schoolId;
+      syncedProfile.schoolName = targetSchool?.schoolName || syncedProfile.schoolName;
+
+      saveLocalUserRegistry(syncedProfile);
+      if (targetSchool) {
+        saveLocalSchoolCache(targetSchool);
+      }
 
       return await resolveUserAccess(syncedProfile, targetSchool);
     } else {
@@ -938,7 +1102,56 @@ export async function loginWithFirebaseAuth(credentials: {
     }
   }
 
-  // BƯỚC 2C: Không tìm thấy tài khoản
+  // 3. NẾU CHƯA TÌM THẤY TRONG LOOKUP: Thử đăng nhập Firebase Auth với danh sách email ứng viên
+  const emailCandidates: string[] = [];
+  if (lowerInput.includes('@')) {
+    emailCandidates.push(lowerInput);
+  } else {
+    emailCandidates.push(`${lowerInput}@gmail.com`);
+    emailCandidates.push(`${lowerInput}@school.tkbpro.edu.vn`);
+    emailCandidates.push(`${lowerInput}@tkbpro.edu.vn`);
+    emailCandidates.push(`${lowerInput}@edu.vn`);
+  }
+
+  const localSchools = getLocalSchoolCache();
+  for (const s of localSchools) {
+    if (isAccountCandidateMatch(s, rawInput, lowerInput, digitsOnly)) {
+      if (s.adminEmail) emailCandidates.push(s.adminEmail.toLowerCase());
+    }
+  }
+  const localUsers = getLocalUserRegistry();
+  for (const u of localUsers) {
+    if (isAccountCandidateMatch(u, rawInput, lowerInput, digitsOnly)) {
+      if (u.email) emailCandidates.push(u.email.toLowerCase());
+    }
+  }
+
+  const uniqueCandidates = Array.from(new Set(emailCandidates.map((e) => e.trim().toLowerCase())));
+
+  let directAuthUser: FirebaseUser | null = null;
+  for (const em of uniqueCandidates) {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, em, password);
+      if (cred.user) {
+        directAuthUser = cred.user;
+        break;
+      }
+    } catch {
+      // Tiếp tục thử email khác
+    }
+  }
+
+  if (directAuthUser) {
+    try {
+      const syncedProfile = await ensureAndSyncUserDocument(directAuthUser);
+      syncedProfile.username = syncedProfile.username || rawInput;
+      return await resolveUserAccess(syncedProfile);
+    } catch (syncErr: any) {
+      console.warn('Lưu ý đồng bộ sau đăng nhập Auth:', syncErr);
+    }
+  }
+
+  // Không tìm thấy tài khoản
   return {
     success: false,
     error: `Không tìm thấy tài khoản tương ứng với "${rawInput}".\n• Vui lòng kiểm tra lại Tên đăng nhập, Mã trường (School ID) hoặc Số điện thoại đã đăng ký.\n• Nếu trường của bạn chưa có tài khoản, vui lòng bấm tab "Đăng Ký Trường Mới"!`,
@@ -1109,15 +1322,32 @@ async function resolveUserAccess(
   }
   if (!school) {
     try {
-      const allSchools = await getAllSchools();
+      const allSchools = await getAllSchools(undefined, undefined, true);
+      const uName = (user.username || '').trim().toLowerCase();
+      const uEmail = (user.email || '').trim().toLowerCase();
+      const uEmailPrefix = uEmail.includes('@') ? uEmail.split('@')[0] : uEmail;
+      const uPhone = (user.phone || '').replace(/\D/g, '');
+
       school = allSchools.find(
         (s) =>
           (user.schoolId && s.schoolId === user.schoolId) ||
           (user.uid && s.adminUid === user.uid) ||
-          (s.adminEmail && user.email && s.adminEmail.toLowerCase() === user.email.toLowerCase()) ||
-          (s.adminEmail && user.username && s.adminEmail.toLowerCase().split('@')[0] === user.username.toLowerCase()) ||
-          (s.adminUsername && user.username && s.adminUsername.toLowerCase() === user.username.toLowerCase())
+          (s.adminUsername && uName && s.adminUsername.toLowerCase() === uName) ||
+          (s.adminUsername && uEmailPrefix && s.adminUsername.toLowerCase() === uEmailPrefix) ||
+          (s.phone && uPhone && s.phone.replace(/\D/g, '') === uPhone) ||
+          (s.adminEmail && uEmail && s.adminEmail.toLowerCase() === uEmail) ||
+          (s.adminEmail && uEmailPrefix && s.adminEmail.toLowerCase().split('@')[0] === uEmailPrefix)
       );
+
+      // Nếu vẫn chưa tìm thấy nhưng trên Firestore có trường
+      if (!school && allSchools.length > 0) {
+        school =
+          allSchools.find(
+            (s) =>
+              (s.adminUsername && uName && s.adminUsername.toLowerCase().includes(uName)) ||
+              (uName && s.schoolId.toLowerCase().includes(uName))
+          ) || allSchools[0];
+      }
     } catch {
       // ignore
     }
@@ -1135,9 +1365,27 @@ async function resolveUserAccess(
   user.schoolId = school.schoolId;
   user.schoolName = school.schoolName;
 
+  // Tự động lưu và cập nhật liên kết schoolId vào Firestore /users/{uid}
+  try {
+    const userDocRef = doc(db, USERS_COLLECTION, user.uid);
+    await setDoc(
+      userDocRef,
+      {
+        schoolId: school.schoolId,
+        schoolName: school.schoolName,
+        role: 'school_admin',
+        username: user.username,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch {
+    // ignore
+  }
+
   // Kiểm tra trạng thái cấp phép & Hạn sử dụng
   const now = new Date();
-  const expiry = new Date(school.expiredAt);
+  const expiry = new Date(school.expiredAt || '2099-12-31T23:59:59.000Z');
   const isPermanent = expiry.getFullYear() >= 2090;
   const isExpired = !isPermanent && now > expiry;
 

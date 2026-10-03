@@ -524,11 +524,31 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
 
               {/* Error Message Alert */}
               {errorMsg && (
-                <div className="mb-4 p-4 rounded-2xl bg-rose-950/80 border border-rose-800/80 flex items-start gap-3 text-xs text-rose-200 animate-shake shadow-lg shadow-rose-950/40">
-                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                  <div className="flex-1 font-medium leading-relaxed whitespace-pre-line">
-                    {errorMsg}
+                <div className="mb-4 p-4 rounded-2xl bg-rose-950/90 border border-rose-700/80 flex flex-col gap-2.5 text-xs text-rose-200 animate-shake shadow-lg shadow-rose-950/40">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 font-medium leading-relaxed whitespace-pre-line">
+                      {errorMsg}
+                    </div>
                   </div>
+                  {authMode === 'LOGIN' && (
+                    <div className="pt-2 border-t border-rose-800/60 flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-[11px] text-rose-300">Quên hoặc không nhớ mật khẩu?</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('FORGOT_PASSWORD');
+                          setErrorMsg(null);
+                          setSuccessMsg(null);
+                          setForgotIdentifier(loginIdentifier);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1.5 cursor-pointer transition-all"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Đặt Lại Mật Khẩu Ngay</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

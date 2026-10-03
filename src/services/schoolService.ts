@@ -268,24 +268,12 @@ export async function createSchool(payload: CreateSchoolPayload): Promise<{
 /**
  * 2. LẤY DANH SÁCH TẤT CẢ CÁC TRƯỜNG HỌC
  */
-export async function getAllSchools(currentUserRole?: string, userSchoolId?: string): Promise<School[]> {
+export async function getAllSchools(currentUserRole?: string, userSchoolId?: string, forceFetchAll: boolean = false): Promise<School[]> {
   let role = currentUserRole;
   let sid = userSchoolId;
 
-  if (typeof window !== 'undefined' && (!role || !sid)) {
-    try {
-      const savedUser = sessionStorage.getItem('tkb_auth_session_user') || localStorage.getItem('tkb_auth_session_user');
-      if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        if (!role) role = parsed.role;
-        if (!sid) sid = parsed.schoolId;
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  if (role === 'school_admin' && sid) {
+  // Chỉ lọc theo trường duy nhất nếu được chỉ định rõ ràng qua tham số và không yêu cầu forceFetchAll
+  if (!forceFetchAll && role === 'school_admin' && sid) {
     const schoolDoc = await getSchoolById(sid);
     if (schoolDoc) return [schoolDoc];
     const local = getLocalSchoolCache().find((s) => s.schoolId === sid);
@@ -294,15 +282,31 @@ export async function getAllSchools(currentUserRole?: string, userSchoolId?: str
   }
 
   const schoolMap = new Map<string, School>();
-  getLocalSchoolCache().forEach((s) => schoolMap.set(s.schoolId, s));
+  getLocalSchoolCache().forEach((s) => {
+    if (s.schoolId) {
+      schoolMap.set(s.schoolId, s);
+    }
+  });
 
   try {
     const snap = await getDocs(collection(db, SCHOOLS_COLLECTION));
     if (!snap.empty) {
       const firestoreSchoolIds = new Set<string>();
       snap.docs.forEach((d) => {
-        const data = d.data() as School;
-        const schoolId = d.id || data.schoolId;
+        const rawData = d.data();
+        const schoolId = rawData.schoolId || d.id;
+        const data: School = {
+          ...rawData,
+          schoolId,
+          schoolName: rawData.schoolName || rawData.name || schoolId,
+          status: rawData.status || 'active',
+          adminUsername: rawData.adminUsername,
+          phone: rawData.phone,
+          adminPasswordInitial: rawData.adminPasswordInitial || rawData.adminPassword,
+          createdAt: rawData.createdAt || new Date().toISOString(),
+          expiredAt: rawData.expiredAt || '2099-12-31T23:59:59.000Z',
+        } as School;
+
         firestoreSchoolIds.add(schoolId);
         schoolMap.set(schoolId, data);
         
@@ -596,10 +600,17 @@ export async function resetSchoolPassword(
  * 6. LẤY THÔNG TIN 1 TRƯỜNG HỌC THEO SCHOOL_ID
  */
 export async function getSchoolById(schoolId: string): Promise<School | null> {
+  if (!schoolId) return null;
   try {
     const docSnap = await getDoc(doc(db, SCHOOLS_COLLECTION, schoolId));
     if (docSnap.exists()) {
-      return docSnap.data() as School;
+      const data = docSnap.data();
+      return {
+        ...data,
+        schoolId: data.schoolId || docSnap.id,
+        schoolName: data.schoolName || data.name || docSnap.id,
+        status: data.status || 'active',
+      } as School;
     }
   } catch (error) {
     console.warn(`Lỗi lấy trường ${schoolId}:`, error);
