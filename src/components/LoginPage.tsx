@@ -399,18 +399,9 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
               </span>
             </h1>
             <p className="text-[11px] sm:text-xs text-slate-400 font-medium">
-              Hệ thống xếp Thời khóa biểu tự động & Phân quyền quản trị trường học
+              Hệ thống xếp Thời khóa biểu tự động thông minh
             </p>
           </div>
-        </div>
-
-        {/* Demo Quick Account Shortcut Tag */}
-        <div className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400 bg-slate-900/80 px-3.5 py-1.5 rounded-xl border border-slate-800">
-          <Shield className="w-4 h-4 text-emerald-400" />
-          <span>Super Admin: </span>
-          <span className="text-white font-mono">admin</span>
-          <span className="text-slate-600">/</span>
-          <span className="text-white font-mono">12345678</span>
         </div>
       </header>
 
@@ -422,15 +413,15 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
             <div className="space-y-5">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Phiên Bản Mới Nhất 2026</span>
+                <span>Phiên Bản V2.1 2026</span>
               </div>
 
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
-                  Tối Ưu Xếp TKB Cho Mọi Trường Học Việt Nam
+                  Tối Ưu Xếp TKB Thông Minh
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
-                  Quản lý giáo viên, phân công chuyên môn, tự động phát hiện xung đột và đồng bộ dữ liệu thời gian thực trên nền tảng Cloud Firebase.
+                  Thuật toán xếp TBK thông minh, đáp ứng đủ nhu cầu của Nhà trường.
                 </p>
               </div>
 
@@ -440,10 +431,6 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
                   Tính Năng Nổi Bật:
                 </div>
                 <ul className="space-y-2 text-xs text-slate-300 font-medium">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Đăng nhập tiện lợi bằng <strong>Tên đăng nhập hoặc Số điện thoại</strong></span>
-                  </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <span>Hỗ trợ tiết ghép nhiều lớp & đồng giảng dạy (Co-teaching)</span>
@@ -469,7 +456,7 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
                 <div>
                   <div className="font-bold text-white">Bảo mật Cloud Đa Trường</div>
                   <div className="text-[11px] text-slate-400">
-                    Dữ liệu được lưu trữ an toàn & mã hóa trên Firebase Authentication.
+                    Dữ liệu được lưu trữ an toàn & mã hóa an toàn trên Cloud.
                   </div>
                 </div>
               </div>
@@ -478,7 +465,7 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
             {/* Bottom Highlight */}
             <div className="pt-3 border-t border-slate-800/80 flex items-center gap-2 text-[11px] text-slate-400">
               <Server className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Máy chủ Cloud sẵn sàng tiếp nhận và xử lý dữ liệu trường học.</span>
+              <span>Phát triển bởi Võ Chiến - ĐT: 0374716105.</span>
             </div>
           </div>
 
@@ -518,7 +505,7 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
                   }`}
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span>Đăng Ký Trường Mới (Trial)</span>
+                  <span>Đăng Ký Tài khoản Trường Mới</span>
                 </button>
               </div>
 
@@ -1068,7 +1055,7 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
             <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-center space-y-1.5">
               <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-indigo-300">
                 <Info className="w-4 h-4 text-indigo-400" />
-                <span>Hệ thống quản lý Thời khóa biểu đa trường TKB Engine Pro</span>
+                <span>Hệ thống quản lý Thời khóa biểu thông minh TKB Engine Pro</span>
               </div>
               <p className="text-[11px] text-slate-400 font-normal">
                 Nếu trường học chưa có tài khoản, nhấn <strong className="text-emerald-400">"Đăng Ký Trường Mới"</strong> ở trên để khởi tạo tài khoản dùng thử 14 ngày.
@@ -1080,7 +1067,7 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess }) => {
 
       {/* Footer */}
       <footer className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 text-center text-xs text-slate-500">
-        © 2026 TKB Engine Pro • Hệ Thống Xếp Thời Khóa Biểu Tự Động Đa Trường Học • Firebase Auth & Cloud Firestore
+        © 2026 TKB Engine Pro • Liên hệ: Võ Chiến - Điện thoại: 0374716105
       </footer>
     </div>
   );
